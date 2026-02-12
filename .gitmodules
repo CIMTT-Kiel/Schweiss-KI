@@ -1,0 +1,3 @@
+[submodule "external/cad-api-client"]
+	path = external/cad-api-client
+	url = git@github.com:CIMTT-Kiel/cad-api-client.git

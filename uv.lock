@@ -10,6 +10,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "client",
+    "schweiss-ki",
+]
+
 [[package]]
 name = "addict"
 version = "2.4.0"
@@ -338,8 +344,8 @@ wheels = [
 
 [[package]]
 name = "client"
-version = "2.0.0"
-source = { editable = "../cad-api-client" }
+version = "1.0.7"
+source = { editable = "external/cad-api-client" }
 dependencies = [
     { name = "ipykernel" },
     { name = "numpy" },
@@ -2252,7 +2258,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "client", editable = "../cad-api-client" },
+    { name = "client", editable = "external/cad-api-client" },
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.7.0" },
     { name = "numpy", specifier = ">=1.24.0" },

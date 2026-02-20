@@ -198,11 +198,10 @@ class WeldVolumeModel:
         )
 
 
-# Standard Segmentierungs-Labels (für später)
+# Standard Segmentierungs-Labels
 STANDARD_LABELS = {
-    0: "background",
-    1: "workpiece_left",
-    2: "workpiece_right",
-    3: "gap_region",
-    4: "weld_seam",
+    0: "background",   # Umgebung, außerhalb relevantem Bereich
+    1: "flank_a",      # Flanke A – eine Seite der V-Naht
+    2: "flank_b",      # Flanke B – andere Seite der V-Naht
+    3: "weld_zone",    # Nahtbereich: Wurzel, Gap
 }

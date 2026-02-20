@@ -1,0 +1,103 @@
+# =============================================================================
+# Schweiß-KI Pipeline Konfiguration
+# AP2.1 - Optimierter Datenfluss: STEP → Segmentierte Punktwolke
+# =============================================================================
+# Phasen:
+#   Phase 1 (KW 06-08): CAD-Konvertierung + WeldVolumeModel         ← aktiv
+#   Phase 2 (KW 09-10): Preprocessing                               ← noch nicht aktiv
+#   Phase 3 (KW 11-12): Segmentierung (RANSAC)                      ← noch nicht aktiv
+#   Phase 4 (KW 13-14): Segmentierung (PointNet) - optional         ← noch nicht aktiv
+# =============================================================================
+
+# Eingabeverzeichnis mit STEP-Dateien
+input_dir: data/synthetic/test_step_files
+
+# Output-Konfiguration
+output:
+  output_dir: data/processed/test_files
+  save_model: true
+  save_intermediate: false   # Zwischenschritte speichern (für Debugging in Phase 2+)
+
+
+# ── Stage 1: CAD-Konvertierung ────────────────────────────────────────────────
+# STEP → Punktwolke via Michel's API
+# Status: aktiv (Phase 1)
+# -----------------------------------------------------------------------------
+cad_conversion:
+  enabled: true
+  point_density: null        # null = API-Standard
+
+
+# ── Stage 2: Preprocessing ───────────────────────────────────────────────────
+# Aufbereitung der Punktwolke vor Segmentierung
+# Status: noch nicht aktiv (Phase 2)
+# -----------------------------------------------------------------------------
+preprocessing:
+  enabled: false
+
+  # Statistical Outlier Removal
+  # Entfernt Punkte die statistisch weit vom Nachbarschaftsmittel abweichen
+  outlier_removal: true
+  outlier_nb_neighbors: 20   # Anzahl Nachbarn für Mittelwertberechnung
+  outlier_std_ratio: 2.0     # Punkte > mean + std_ratio*std werden entfernt
+
+  # Voxel Grid Downsampling
+  # Reduziert Punktanzahl durch gleichmäßiges Raster
+  voxel_downsampling: false
+  voxel_size: 0.5            # mm – kleiner = mehr Punkte, langsamer
+
+  # Normal Estimation
+  # Berechnet Oberflächennormalen (benötigt für einige Segmentierungsverfahren)
+  normal_estimation: false
+  normal_radius: 2.0         # mm – Suchradius für Nachbarpunkte
+  normal_max_nn: 30          # Max. Nachbarn für Normalenberechnung
+
+  # ROI Extraction (Region of Interest)
+  # Beschneidet Punktwolke auf relevanten Bereich (Schweißnahtbereich)
+  # roi_extraction: false
+  # roi_margin: 5.0          # mm – Puffer um Schweißnahtbereich
+
+
+# ── Stage 3: Segmentierung ───────────────────────────────────────────────────
+# Klassifikation der Punkte in semantische Regionen
+# Status: noch nicht aktiv (Phase 3)
+#
+# Labels:
+#   0 = background       (Umgebung, außerhalb relevantem Bereich)
+#   1 = flank_a          (Flanke A – eine Seite der V-Naht)
+#   2 = flank_b          (Flanke B – andere Seite der V-Naht)
+#   3 = weld_zone        (Nahtbereich: Wurzel, Gap – Region zwischen den Flanken)
+# Hinweis: Flanken separat, da AP2.2 jede Seite einzeln mit CAD abgleicht
+# -----------------------------------------------------------------------------
+segmentation:
+  enabled: false
+  method: ransac             # ransac | pointnet | hybrid
+
+  # RANSAC – geometrische Segmentierung
+  # Erkennt Ebenen (Werkstückflächen) und leitet Gap-Region ab
+  ransac_threshold: 0.25     # mm – entspricht Toleranzanforderung ±0.25mm
+  ransac_max_iterations: 1000
+  dbscan_eps: 0.5            # mm – Nachbarschaftsradius für Cluster
+  dbscan_min_points: 10      # Mindestpunkte pro Cluster
+
+  # PointNet – ML-basierte Segmentierung (Phase 4, optional)
+  # pointnet_model: models/pointnet_weights.pth
+  # pointnet_confidence_threshold: 0.8
+
+  # Hybrid – RANSAC + PointNet Fusion (Phase 4, optional)
+  # hybrid_ransac_weight: 0.6
+  # hybrid_pointnet_weight: 0.4
+
+
+# ── Evaluation ───────────────────────────────────────────────────────────────
+# Metriken die nach jedem Lauf berechnet werden
+# Status: noch nicht aktiv
+# -----------------------------------------------------------------------------
+# evaluation:
+#   enabled: false
+#   metrics:
+#     - point_retention_rate   # Preprocessing: wie viele Punkte bleiben
+#     - processing_time        # Laufzeit pro Stage
+#     - iou_per_class          # Segmentierung: Intersection over Union
+#     - overall_accuracy       # Segmentierung: Gesamtgenauigkeit
+#   output_file: results/eval_{timestamp}.json

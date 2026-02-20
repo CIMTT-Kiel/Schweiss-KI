@@ -8,4 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
-data/
+
+# Data
+data/**/*
+
+# .gitkeep (Struktur behalten)
+!data/**/.gitkeep

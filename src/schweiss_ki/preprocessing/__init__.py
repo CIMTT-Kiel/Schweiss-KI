@@ -3,7 +3,7 @@ Preprocessing-Modul für Schweiß-KI AP2.1 Phase 2.
 
 Konfigurierbare Pipeline zur Aufbereitung von Punktwolken.
 
-Schnelleinstieg:
+Schnelleinstieg (manuell):
     from schweiss_ki.preprocessing import (
         PreprocessingPipeline,
         StatisticalOutlierFilter,
@@ -18,22 +18,29 @@ Schnelleinstieg:
     ])
     pcd_clean, report = pipeline.process(pcd_raw)
     print(report.summary())
+
+Schnelleinstieg (aus YAML):
+    from schweiss_ki.preprocessing import PreprocessingPipeline
+
+    pipeline = PreprocessingPipeline.from_config(
+        "configs/preprocessing.yaml", source_type="real"
+    )
+    pcd_clean, report = pipeline.process(pcd_raw)
 """
 
 from .base import (
+    PreprocessingPipeline,
     PreprocessingReport,
     PreprocessingStep,
     StepReport,
 )
-from .pipeline import PreprocessingPipeline
 from .downsampling import RandomDownsampler, VoxelGridDownsampler
 from .filtering import RadiusOutlierFilter, StatisticalOutlierFilter
-from .normalization import NormalEstimator
+from .normalization import Centerer, NormalEstimator
 
 __all__ = [
-    # Pipeline
-    "PreprocessingPipeline",
     # Base
+    "PreprocessingPipeline",
     "PreprocessingReport",
     "PreprocessingStep",
     "StepReport",
@@ -45,4 +52,5 @@ __all__ = [
     "RandomDownsampler",
     # Enrichment
     "NormalEstimator",
+    "Centerer",
 ]

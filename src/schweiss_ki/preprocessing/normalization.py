@@ -4,6 +4,7 @@ Anreicherungs-Steps für die Preprocessing-Pipeline.
 Enthält Steps, die Punkte mit zusätzlichen Informationen anreichern
 (statt sie zu entfernen):
 - NormalEstimator: Schätzt Oberflächennormalen und richtet sie aus
+- Centerer: Verschiebt die Punktwolke, sodass der Schwerpunkt im Ursprung liegt
 """
 from __future__ import annotations
 
@@ -93,3 +94,38 @@ class NormalEstimator(PreprocessingStep):
             "orient_mode": self._orient_mode,
             "scan_origin": self._scan_origin,
         }
+
+
+class Centerer(PreprocessingStep):
+    """
+    Verschiebt die Punktwolke, sodass der Schwerpunkt im Ursprung liegt.
+
+    Nützlich als Normalisierungsschritt vor Segmentierung oder
+    Registrierung, um numerische Stabilität zu verbessern.
+
+    Hinweis: Die Punktanzahl ändert sich nicht – es werden keine
+    Punkte entfernt, nur verschoben.
+    """
+
+    def __init__(self, enabled: bool = True):
+        """
+        Args:
+            enabled: Step aktiv/inaktiv.
+        """
+        self._enabled = enabled
+
+    @property
+    def name(self) -> str:
+        return "centerer"
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def _apply(self, pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
+        centroid = pcd.get_center()
+        pcd_centered = pcd.translate(-centroid)
+        return pcd_centered
+
+    def get_params(self) -> dict:
+        return {}

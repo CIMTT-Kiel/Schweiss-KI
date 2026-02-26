@@ -3,9 +3,9 @@
 # AP2.1 - Optimierter Datenfluss: STEP → Segmentierte Punktwolke
 # =============================================================================
 # Phasen:
-#   Phase 1 (KW 06-08): CAD-Konvertierung + WeldVolumeModel         ← aktiv
-#   Phase 2 (KW 09-10): Preprocessing                               ← noch nicht aktiv
-#   Phase 3 (KW 11-12): Segmentierung (RANSAC)                      ← noch nicht aktiv
+#   Phase 1 (KW 06-08): CAD-Konvertierung + WeldVolumeModel         ← abgeschlossen
+#   Phase 2 (KW 09-11): Preprocessing                               ← aktiv
+#   Phase 3 (KW 10-15): Segmentierung (RANSAC)                      ← noch nicht aktiv
 #   Phase 4 (KW 13-14): Segmentierung (PointNet) - optional         ← noch nicht aktiv
 # =============================================================================
 
@@ -16,7 +16,7 @@ input_dir: data/synthetic/test_step_files
 output:
   output_dir: data/processed/test_files
   save_model: true
-  save_intermediate: false   # Zwischenschritte speichern (für Debugging in Phase 2+)
+  save_intermediate: false   # Zwischenschritte speichern (für Debugging)
 
 
 # ── Stage 1: CAD-Konvertierung ────────────────────────────────────────────────
@@ -29,38 +29,89 @@ cad_conversion:
 
 
 # ── Stage 2: Preprocessing ───────────────────────────────────────────────────
-# Aufbereitung der Punktwolke vor Segmentierung
-# Status: noch nicht aktiv (Phase 2)
+# Konfigurierbare Chain zur Aufbereitung von Punktwolken.
+# Status: aktiv (Phase 2)
+#
+# Aufbau:
+#   enabled:                   Globaler Ein-/Ausschalter für die gesamte Stage
+#   source_type_overrides:     Überschreiben einzelne Step-Parameter je nach
+#                              WeldVolumeModel.source_type ("ideal"/"real"/"synthetic")
+#   steps:                     Globale Defaults – Reihenfolge = Ausführungsreihenfolge
+#
+# Alle Längenwerte in mm.
+# Parameter werden mit realen Scandaten von Heidenbluth validiert und angepasst.
 # -----------------------------------------------------------------------------
 preprocessing:
-  enabled: false
+  enabled: false             # ← auf true setzen wenn Pipeline-Integration fertig
 
-  # Statistical Outlier Removal
-  # Entfernt Punkte die statistisch weit vom Nachbarschaftsmittel abweichen
-  outlier_removal: true
-  outlier_nb_neighbors: 20   # Anzahl Nachbarn für Mittelwertberechnung
-  outlier_std_ratio: 2.0     # Punkte > mean + std_ratio*std werden entfernt
+  # ── Source-Type-Overrides ──────────────────────────────────────────────────
+  # WeldVolumeModel.source_type bestimmt automatisch welcher Override aktiv ist.
+  source_type_overrides:
 
-  # Voxel Grid Downsampling
-  # Reduziert Punktanzahl durch gleichmäßiges Raster
-  voxel_downsampling: false
-  voxel_size: 0.5            # mm – kleiner = mehr Punkte, langsamer
+    ideal:
+      # CAD-Punktwolken (von Michel's API) sind sauber – Outlier-Filter nicht nötig
+      statistical_outlier_filter:
+        enabled: false
+      radius_outlier_filter:
+        enabled: false
+      # Voxel-Downsampling trotzdem für konsistente Dichte, aber feiner
+      voxel_grid_downsampler:
+        voxel_size: 0.3
 
-  # Normal Estimation
-  # Berechnet Oberflächennormalen (benötigt für einige Segmentierungsverfahren)
-  normal_estimation: false
-  normal_radius: 2.0         # mm – Suchradius für Nachbarpunkte
-  normal_max_nn: 30          # Max. Nachbarn für Normalenberechnung
+    synthetic:
+      # Synthetisches Rauschen ist kontrolliert – weniger aggressives Filtering
+      statistical_outlier_filter:
+        std_ratio: 3.0
 
-  # ROI Extraction (Region of Interest)
-  # Beschneidet Punktwolke auf relevanten Bereich (Schweißnahtbereich)
-  # roi_extraction: false
-  # roi_margin: 5.0          # mm – Puffer um Schweißnahtbereich
+    real:
+      # Reale Scandaten: alle Filter aktiv
+      # Parameter werden nach Eingang der Heidenbluth-Scans validiert
+      statistical_outlier_filter:
+        enabled: true
+      radius_outlier_filter:
+        enabled: true
+
+  # ── Steps (globale Defaults) ───────────────────────────────────────────────
+  # Reihenfolge der Schlüssel = Ausführungsreihenfolge der Pipeline.
+
+  steps:
+
+    # 1. Statistischer Ausreißerfilter
+    #    Entfernt Punkte deren mittlere kNN-Distanz weit vom Durchschnitt abweicht.
+    #    Zuerst ausführen: grobe Fehler vor feinerer Verarbeitung entfernen.
+    statistical_outlier_filter:
+      enabled: true
+      nb_neighbors: 20    # Anzahl Nachbarn für Distanzberechnung
+      std_ratio: 2.0      # Schwellwert in Standardabweichungen (kleiner = aggressiver)
+
+    # 2. Radius-Ausreißerfilter
+    #    Entfernt isolierte Einzelpunkte (potenzielle Spritzer-Kandidaten).
+    #    Deaktiviert by default – erst sinnvoll mit realen Scandaten.
+    radius_outlier_filter:
+      enabled: false
+      nb_points: 16       # Mindestanzahl Nachbarn im Radius
+      radius: 1.5         # Suchradius in mm
+
+    # 3. Voxel-Grid-Downsampling
+    #    Gleichmäßige Punktdichte über die gesamte Punktwolke.
+    #    voxel_size abhängig von Scanner-Auflösung – nach Erhalt der Heidenbluth-Scans anpassen.
+    voxel_grid_downsampler:
+      enabled: true
+      voxel_size: 0.5     # Voxelgröße in mm (Faustregel: 2-3× mittlerer Punktabstand)
+
+    # 4. Normalenschätzung
+    #    Berechnet Oberflächennormalen – Voraussetzung für RANSAC-Segmentierung (Phase 4).
+    normal_estimator:
+      enabled: true
+      radius: 2.0         # Suchradius für Nachbarpunkte in mm
+      max_nn: 30          # Maximale Nachbarn im Suchradius
+      orientation: consistent   # "consistent" oder "camera"
+      # camera_location: [0.0, 0.0, 100.0]  # Nur bei orientation: camera
 
 
 # ── Stage 3: Segmentierung ───────────────────────────────────────────────────
 # Klassifikation der Punkte in semantische Regionen
-# Status: noch nicht aktiv (Phase 3)
+# Status: noch nicht aktiv (Phase 4)
 #
 # Labels:
 #   0 = background       (Umgebung, außerhalb relevantem Bereich)
@@ -74,7 +125,6 @@ segmentation:
   method: ransac             # ransac | pointnet | hybrid
 
   # RANSAC – geometrische Segmentierung
-  # Erkennt Ebenen (Werkstückflächen) und leitet Gap-Region ab
   ransac_threshold: 0.25     # mm – entspricht Toleranzanforderung ±0.25mm
   ransac_max_iterations: 1000
   dbscan_eps: 0.5            # mm – Nachbarschaftsradius für Cluster
@@ -83,10 +133,6 @@ segmentation:
   # PointNet – ML-basierte Segmentierung (Phase 4, optional)
   # pointnet_model: models/pointnet_weights.pth
   # pointnet_confidence_threshold: 0.8
-
-  # Hybrid – RANSAC + PointNet Fusion (Phase 4, optional)
-  # hybrid_ransac_weight: 0.6
-  # hybrid_pointnet_weight: 0.4
 
 
 # ── Evaluation ───────────────────────────────────────────────────────────────

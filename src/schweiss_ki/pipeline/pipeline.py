@@ -1,8 +1,11 @@
 """
 Pipeline - End-to-End Orchestrierung
-AP2.1 Phase 1: STEP → WeldVolumeModel
+AP2.1
 
-Erweiterbar für Phase 2 (Preprocessing) und Phase 3 (Segmentierung).
+Phase 1: CAD-Konvertierung + WeldVolumeModel       ← abgeschlossen
+Phase 2: + Preprocessing                           ← aktiv
+Phase 3: + Segmentierung (RANSAC)                  ← noch nicht aktiv
+Phase 4: + Segmentierung (PointNet, optional)      ← noch nicht aktiv
 """
 import time
 import logging
@@ -25,38 +28,29 @@ logger = logging.getLogger(__name__)
 class CADConversionConfig:
     """Konfiguration für CAD-Konvertierung"""
     enabled: bool = True
-    # Platzhalter für spätere API-Optionen (z.B. Punktdichte, Format)
     point_density: Optional[float] = None  # None = API-Standard
 
 
 @dataclass
 class PreprocessingConfig:
-    """Konfiguration für Preprocessing (Phase 2)"""
+    """
+    Konfiguration für Preprocessing (Phase 2).
+
+    Die detaillierte Step-Konfiguration (Filter-Parameter, source_type_overrides)
+    lebt in der pipeline.yaml unter dem 'preprocessing.steps'-Block und wird
+    von PreprocessingPipeline.from_config() direkt gelesen.
+
+    Hier liegt nur der globale Ein-/Ausschalter.
+    """
     enabled: bool = False
-
-    # Statistical Outlier Removal
-    outlier_removal: bool = True
-    outlier_nb_neighbors: int = 20
-    outlier_std_ratio: float = 2.0
-
-    # Voxel Downsampling
-    voxel_downsampling: bool = False
-    voxel_size: float = 0.5  # mm
-
-    # Normal Estimation
-    normal_estimation: bool = False
-    normal_radius: float = 2.0   # mm
-    normal_max_nn: int = 30
 
 
 @dataclass
 class SegmentationConfig:
-    """Konfiguration für Segmentierung (Phase 3)"""
+    """Konfiguration für Segmentierung (Phase 3/4)"""
     enabled: bool = False
-    method: str = "ransac"  # ransac | pointnet | hybrid
-
-    # RANSAC
-    ransac_threshold: float = 0.25  # mm (Toleranzanforderung)
+    method: str = "ransac"          # ransac | pointnet | hybrid
+    ransac_threshold: float = 0.25  # mm (Toleranzanforderung ±0.25mm)
     dbscan_eps: float = 0.5         # mm
     dbscan_min_points: int = 10
 
@@ -66,18 +60,14 @@ class OutputConfig:
     """Konfiguration für Output"""
     output_dir: Path = Path("data/processed")
     save_model: bool = True
-    # Platzhalter für spätere Optionen
     save_intermediate: bool = False  # Preprocessing-Zwischenschritte speichern
 
 
 @dataclass
 class PipelineConfig:
     """Hauptkonfiguration - wird aus YAML geladen"""
-    # I/O
     input_dir: Path = Path("data/raw/step_files")
     output: OutputConfig = field(default_factory=OutputConfig)
-
-    # Stages
     cad_conversion: CADConversionConfig = field(default_factory=CADConversionConfig)
     preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
     segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
@@ -87,35 +77,24 @@ class PipelineConfig:
         """Erzeugt PipelineConfig aus geparster YAML (dict)"""
         cfg = cls()
 
-        # I/O
         if "input_dir" in d:
             cfg.input_dir = Path(d["input_dir"])
 
-        # Output
         if "output" in d:
             o = d["output"]
             cfg.output.output_dir = Path(o.get("output_dir", cfg.output.output_dir))
             cfg.output.save_model = o.get("save_model", cfg.output.save_model)
             cfg.output.save_intermediate = o.get("save_intermediate", cfg.output.save_intermediate)
 
-        # CAD Conversion
         if "cad_conversion" in d:
             c = d["cad_conversion"]
             cfg.cad_conversion.enabled = c.get("enabled", cfg.cad_conversion.enabled)
             cfg.cad_conversion.point_density = c.get("point_density", cfg.cad_conversion.point_density)
 
-        # Preprocessing
         if "preprocessing" in d:
             p = d["preprocessing"]
             cfg.preprocessing.enabled = p.get("enabled", cfg.preprocessing.enabled)
-            cfg.preprocessing.outlier_removal = p.get("outlier_removal", cfg.preprocessing.outlier_removal)
-            cfg.preprocessing.outlier_nb_neighbors = p.get("outlier_nb_neighbors", cfg.preprocessing.outlier_nb_neighbors)
-            cfg.preprocessing.outlier_std_ratio = p.get("outlier_std_ratio", cfg.preprocessing.outlier_std_ratio)
-            cfg.preprocessing.voxel_downsampling = p.get("voxel_downsampling", cfg.preprocessing.voxel_downsampling)
-            cfg.preprocessing.voxel_size = p.get("voxel_size", cfg.preprocessing.voxel_size)
-            cfg.preprocessing.normal_estimation = p.get("normal_estimation", cfg.preprocessing.normal_estimation)
 
-        # Segmentation
         if "segmentation" in d:
             s = d["segmentation"]
             cfg.segmentation.enabled = s.get("enabled", cfg.segmentation.enabled)
@@ -135,12 +114,14 @@ class Pipeline:
     End-to-End Pipeline: STEP → WeldVolumeModel
 
     Phase 1: CAD-Konvertierung + Persistierung
-    Phase 2: + Preprocessing (folgt)
+    Phase 2: + Preprocessing (PreprocessingPipeline aus pipeline.yaml)
     Phase 3: + Segmentierung (folgt)
     """
 
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, config_path: Optional[Path] = None):
         self.config = config
+        # config_path wird für PreprocessingPipeline.from_config() benötigt
+        self._config_path = Path(config_path) if config_path else None
         self._setup_cad_converter()
 
     def _setup_cad_converter(self):
@@ -173,9 +154,10 @@ class Pipeline:
         # Stage 1: CAD-Konvertierung
         pcd = self._run_cad_conversion(step_file)
 
-        # Stage 2: Preprocessing (Phase 2 – noch nicht aktiv)
+        # Stage 2: Preprocessing
+        preprocessing_report = None
         if self.config.preprocessing.enabled:
-            pcd = self._run_preprocessing(pcd, model_id)
+            pcd, preprocessing_report = self._run_preprocessing(pcd, source_type="ideal")
 
         # WeldVolumeModel erstellen
         model = WeldVolumeModel(
@@ -183,13 +165,59 @@ class Pipeline:
             source_type="ideal",
             source_file=step_file,
             point_cloud=pcd,
+            preprocessing_report=preprocessing_report,
         )
 
-        # Stage 3: Segmentierung (Phase 3 – noch nicht aktiv)
+        # Stage 3: Segmentierung
         if self.config.segmentation.enabled:
             self._run_segmentation(model)
 
         # Ausgabe
+        if self.config.output.save_model:
+            save_path = model.save(self.config.output.output_dir)
+            logger.info(f"  → Gespeichert: {save_path}")
+
+        elapsed = time.time() - t_start
+        logger.info(f"  ✓ {model_id}: {model.n_points:,} Punkte ({elapsed:.1f}s)")
+
+        return model
+
+    def process_scan(self, scan_file: Path, source_type: str = "real") -> WeldVolumeModel:
+        """
+        Verarbeitet eine Scan-Datei (PCD/PLY/XYZ) → WeldVolumeModel
+
+        Args:
+            scan_file: Pfad zur Scan-Datei
+            source_type: "real" oder "synthetic"
+
+        Returns:
+            WeldVolumeModel
+        """
+        scan_file = Path(scan_file)
+        model_id = scan_file.stem
+        logger.info(f"Verarbeite Scan: {scan_file.name}")
+        t_start = time.time()
+
+        pcd = o3d.io.read_point_cloud(str(scan_file))
+        if len(pcd.points) == 0:
+            raise ValueError(f"Punktwolke leer oder Format nicht unterstützt: {scan_file}")
+        logger.debug(f"  Scan geladen: {len(pcd.points):,} Punkte")
+
+        preprocessing_report = None
+        if self.config.preprocessing.enabled:
+            pcd, preprocessing_report = self._run_preprocessing(pcd, source_type=source_type)
+
+        model = WeldVolumeModel(
+            model_id=model_id,
+            source_type=source_type,
+            source_file=scan_file,
+            point_cloud=pcd,
+            preprocessing_report=preprocessing_report,
+        )
+
+        if self.config.segmentation.enabled:
+            self._run_segmentation(model)
+
         if self.config.output.save_model:
             save_path = model.save(self.config.output.output_dir)
             logger.info(f"  → Gespeichert: {save_path}")
@@ -252,7 +280,6 @@ class Pipeline:
 
     def _run_cad_conversion(self, step_file: Path) -> o3d.geometry.PointCloud:
         """Stage 1: STEP → Point Cloud via Michel's API"""
-        # Temporärer PLY-Pfad (im Output-Verzeichnis)
         tmp_ply = (
             self.config.output.output_dir
             / step_file.stem
@@ -267,13 +294,45 @@ class Pipeline:
         logger.debug(f"  Point Cloud geladen: {len(pcd.points):,} Punkte")
         return pcd
 
-    def _run_preprocessing(self, pcd: o3d.geometry.PointCloud, model_id: str) -> o3d.geometry.PointCloud:
-        """Stage 2: Preprocessing (Phase 2 – Platzhalter)"""
-        # Wird in Phase 2 implementiert
-        logger.debug("  Preprocessing: noch nicht implementiert (Phase 2)")
-        return pcd
+    def _run_preprocessing(
+        self,
+        pcd: o3d.geometry.PointCloud,
+        source_type: str,
+    ) -> tuple:
+        """
+        Stage 2: Preprocessing via PreprocessingPipeline.
+
+        Liest die Step-Konfiguration direkt aus der pipeline.yaml
+        (Abschnitt 'preprocessing.steps' + 'preprocessing.source_type_overrides').
+
+        Returns:
+            Tuple aus (verarbeitete PointCloud, PreprocessingReport)
+        """
+        from ..preprocessing import PreprocessingPipeline
+
+        if self._config_path is None:
+            logger.warning(
+                "Kein config_path gesetzt – Preprocessing mit Default-Parametern."
+                " Pipeline mit config_path initialisieren für YAML-Konfiguration."
+            )
+            preprocessing_pipeline = PreprocessingPipeline(source_type=source_type)
+        else:
+            preprocessing_pipeline = PreprocessingPipeline.from_config(
+                self._config_path,
+                source_type=source_type,
+            )
+
+        logger.debug(f"  Preprocessing: {preprocessing_pipeline}")
+        pcd_clean, report = preprocessing_pipeline.process(pcd)
+
+        logger.debug(
+            f"  Preprocessing abgeschlossen: "
+            f"{report.points_in:,} → {report.points_out:,} Punkte "
+            f"({report.total_retention_rate:.1%} behalten, "
+            f"{report.total_duration_ms:.0f}ms)"
+        )
+        return pcd_clean, report
 
     def _run_segmentation(self, model: WeldVolumeModel):
-        """Stage 3: Segmentierung (Phase 3 – Platzhalter)"""
-        # Wird in Phase 3 implementiert
-        logger.debug("  Segmentierung: noch nicht implementiert (Phase 3)")
+        """Stage 3: Segmentierung (Phase 4 – Platzhalter)"""
+        logger.debug("  Segmentierung: noch nicht implementiert (Phase 4)")

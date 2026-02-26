@@ -105,7 +105,7 @@ preprocessing:
       enabled: true
       radius: 2.0         # Suchradius für Nachbarpunkte in mm
       max_nn: 30          # Maximale Nachbarn im Suchradius
-      orientation: consistent   # "consistent" oder "camera"
+      orient_mode: consistent   # "consistent" oder "camera"
       # camera_location: [0.0, 0.0, 100.0]  # Nur bei orientation: camera
 
 

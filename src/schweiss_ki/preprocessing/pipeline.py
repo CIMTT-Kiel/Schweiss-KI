@@ -23,7 +23,7 @@ class PreprocessingPipeline:
     zu einem PreprocessingReport zusammengefasst wird.
 
     Typische Verwendung:
-        pipeline = PreprocessingPipeline.from_config("configs/preprocessing.yaml", source_type="real")
+        pipeline = PreprocessingPipeline.from_config("configs/pipeline.yaml", source_type="real")
         pcd_clean, report = pipeline.process(pcd_raw)
 
     Oder manuell:
@@ -38,12 +38,7 @@ class PreprocessingPipeline:
         self._steps: list[PreprocessingStep] = []
 
     def add_step(self, step: PreprocessingStep) -> "PreprocessingPipeline":
-        """
-        Fügt einen Step ans Ende der Pipeline an.
-
-        Returns:
-            self (für Method Chaining)
-        """
+        """Fügt einen Step ans Ende der Pipeline an. Gibt self zurück für Method Chaining."""
         self._steps.append(step)
         return self
 
@@ -81,14 +76,14 @@ class PreprocessingPipeline:
             points_before = len(current_pcd.points)
             t_start = time.perf_counter()
 
-            current_pcd = step.apply(current_pcd)
+            # apply() gibt (PointCloud, base.StepReport) zurück – Tuple entpacken!
+            current_pcd, base_report = step.apply(current_pcd)
 
             duration_ms = (time.perf_counter() - t_start) * 1000
-            stats = step.get_stats()
 
             step_report = StepReport(
                 step_name=step.name,
-                params=_extract_params(step),
+                params=base_report.params,
                 points_before=points_before,
                 points_after=len(current_pcd.points),
                 duration_ms=duration_ms,
@@ -118,7 +113,7 @@ class PreprocessingPipeline:
 
         from .downsampling import RandomDownsampler, VoxelGridDownsampler
         from .filtering import RadiusOutlierFilter, StatisticalOutlierFilter
-        from .normalization import Centerer, NormalEstimator
+        from .normalization import NormalEstimator
 
         config_path = Path(config_path)
         with open(config_path) as f:
@@ -128,7 +123,7 @@ class PreprocessingPipeline:
         resolved_source_type = source_type or cfg.get("source_type", "real")
 
         # Basis-Steps aus Config laden
-        steps_cfg: dict[str, Any] = cfg.get("steps", {})
+        steps_cfg: dict[str, Any] = dict(cfg.get("steps", {}))
 
         # Source-type-spezifische Overrides anwenden
         overrides = cfg.get("source_type_overrides", {}).get(resolved_source_type, {})
@@ -138,14 +133,12 @@ class PreprocessingPipeline:
             else:
                 steps_cfg[key] = val
 
-        # Step-Registry: Name → Klasse
         step_registry = {
             "statistical_outlier_filter": StatisticalOutlierFilter,
             "radius_outlier_filter": RadiusOutlierFilter,
             "voxel_grid_downsampler": VoxelGridDownsampler,
             "random_downsampler": RandomDownsampler,
             "normal_estimator": NormalEstimator,
-            "centerer": Centerer,
         }
 
         pipeline = cls(source_type=resolved_source_type)
@@ -157,26 +150,11 @@ class PreprocessingPipeline:
             if step_name not in step_registry:
                 raise ValueError(f"Unbekannter Preprocessing-Step: '{step_name}'")
 
-            # Params ohne 'enabled' übergeben
             params = {k: v for k, v in step_cfg.items() if k != "enabled"}
-            step = step_registry[step_name](**params)
-            pipeline.add_step(step)
+            pipeline.add_step(step_registry[step_name](**params))
 
         return pipeline
 
     def __repr__(self) -> str:
         step_names = [s.name for s in self._steps]
         return f"PreprocessingPipeline(source_type='{self.source_type}', steps={step_names})"
-
-
-def _extract_params(step: PreprocessingStep) -> dict[str, Any]:
-    """Extrahiert konfigurierbare Parameter aus einem Step für den Report."""
-    params = {}
-    for attr in vars(step):
-        if attr.startswith("_"):
-            continue
-        val = getattr(step, attr)
-        # Nur einfache serialisierbare Typen
-        if isinstance(val, (int, float, str, bool, list)):
-            params[attr] = val
-    return params

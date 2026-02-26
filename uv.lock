@@ -2243,6 +2243,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "client" },
+    { name = "ipykernel" },
     { name = "numpy" },
     { name = "open3d" },
     { name = "scikit-learn" },
@@ -2259,6 +2260,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "client", editable = "external/cad-api-client" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.7.0" },
     { name = "numpy", specifier = ">=1.24.0" },

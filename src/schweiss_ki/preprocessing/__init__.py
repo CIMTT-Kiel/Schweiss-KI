@@ -21,18 +21,19 @@ Schnelleinstieg:
 """
 
 from .base import (
-    PreprocessingPipeline,
     PreprocessingReport,
     PreprocessingStep,
     StepReport,
 )
+from .pipeline import PreprocessingPipeline
 from .downsampling import RandomDownsampler, VoxelGridDownsampler
 from .filtering import RadiusOutlierFilter, StatisticalOutlierFilter
 from .normalization import NormalEstimator
 
 __all__ = [
-    # Base
+    # Pipeline
     "PreprocessingPipeline",
+    # Base
     "PreprocessingReport",
     "PreprocessingStep",
     "StepReport",

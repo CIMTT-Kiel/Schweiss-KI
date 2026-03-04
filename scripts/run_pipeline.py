@@ -20,6 +20,7 @@ Verwendung:
 """
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 import yaml
@@ -157,8 +158,8 @@ def main():
         logger.info("Dry-run: Config valide, kein Durchlauf.")
         sys.exit(0)
 
-    # Pipeline starten
-    pipeline = Pipeline(config)
+    # Pipeline starten (config_path wird für PreprocessingPipeline.from_config() benötigt)
+    pipeline = Pipeline(config, config_path=config_path)
 
     if args.input:
         # Einzeldatei

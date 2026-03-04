@@ -290,21 +290,6 @@ class PreprocessingStep(ABC):
         pass
 
 
-# ---------------------------------------------------------------------------
-# Hilfsfunktion
-# ---------------------------------------------------------------------------
-
-def _extract_params(step: PreprocessingStep) -> dict[str, Any]:
-    """Extrahiert konfigurierbare Parameter aus einem Step für den Report."""
-    params = {}
-    for attr in vars(step):
-        if attr.startswith("_"):
-            continue
-        val = getattr(step, attr)
-        if isinstance(val, (int, float, str, bool, list)):
-            params[attr] = val
-    return params
-
 
 # ---------------------------------------------------------------------------
 # Pipeline

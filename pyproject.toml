@@ -1,7 +1,7 @@
 [project]
 name = "schweiss-ki"
 version = "0.1.0"
-description = "AI-gestützte Schweißnaht-Qualitätskontrolle - AP2.1"
+description = "AI-gestützte Schweißnaht-Qualitätskontrolle"
 requires-python = ">=3.11"
 dependencies = [
     "open3d>=0.18.0",

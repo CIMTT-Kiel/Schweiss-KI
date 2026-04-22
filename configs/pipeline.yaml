@@ -88,9 +88,9 @@ preprocessing:
     #    Entfernt isolierte Einzelpunkte (potenzielle Spritzer-Kandidaten).
     #    Deaktiviert by default – erst sinnvoll mit realen Scandaten.
     radius_outlier_filter:
-      enabled: false
-      nb_points: 16       # Mindestanzahl Nachbarn im Radius
-      radius: 1.5         # Suchradius in mm
+      enabled: true
+      min_nb_points: 5       # Mindestanzahl Nachbarn im Radius
+      search_radius: 1.0         # Suchradius in mm
 
     # 3. Voxel-Grid-Downsampling
     #    Gleichmäßige Punktdichte über die gesamte Punktwolke.
@@ -110,29 +110,45 @@ preprocessing:
 
 
 # ── Stage 3: Segmentierung ───────────────────────────────────────────────────
-# Klassifikation der Punkte in semantische Regionen
-# Status: noch nicht aktiv (Phase 4)
+# Klassifikation der Punkte in semantische Regionen.
+# Status: aktiv (Phase 3)
 #
 # Labels:
-#   0 = background       (Umgebung, außerhalb relevantem Bereich)
-#   1 = flank_a          (Flanke A – eine Seite der V-Naht)
-#   2 = flank_b          (Flanke B – andere Seite der V-Naht)
-#   3 = weld_zone        (Nahtbereich: Wurzel, Gap – Region zwischen den Flanken)
-# Hinweis: Flanken separat, da AP2.2 jede Seite einzeln mit CAD abgleicht
+#   0 = background          (Werkstück-Oberseite, Umgebung, Artefakte außerhalb Naht)
+#   1 = flank_a             (Linke V-Fase, Normale n_x > 0)
+#   2 = flank_b             (Rechte V-Fase, Normale n_x < 0)
+#   3 = gap_region          (Freier Raum zwischen den Fasen)
+#   4 = sub_gap_artifacts   (Punkte unterhalb Flanken-Unterkante, z.B. Durchstich)
 # -----------------------------------------------------------------------------
 segmentation:
-  enabled: false
-  method: ransac             # ransac | pointnet | hybrid
+  enabled: true
 
-  # RANSAC – geometrische Segmentierung
-  ransac_threshold: 0.25     # mm – entspricht Toleranzanforderung ±0.25mm
-  ransac_max_iterations: 1000
-  dbscan_eps: 0.5            # mm – Nachbarschaftsradius für Cluster
-  dbscan_min_points: 10      # Mindestpunkte pro Cluster
+  steps:
+    # 1. Werkstück-Oberseite als Background entfernen
+    background_remover:
+      enabled: true
+      ransac_threshold: 0.25         # mm (= Toleranzanforderung AP2)
+      max_iterations: 1000
+      ransac_n: 3
+      expected_normal: [0.0, 0.0, 1.0]
+      normal_cos_threshold: 0.95     # cos(~18°)
 
-  # PointNet – ML-basierte Segmentierung (Phase 4, optional)
-  # pointnet_model: models/pointnet_weights.pth
-  # pointnet_confidence_threshold: 0.8
+    # 2. V-Fasen segmentieren (zweimal RANSAC, signed Normalen-Filter)
+    flank_segmenter:
+      enabled: true
+      ransac_threshold: 0.25
+      max_iterations: 1000
+      ransac_n: 3
+      expected_flank_angle_deg: 30.0  # Flanke zur Vertikalen (60° V-Naht)
+      normal_cos_threshold: 0.85      # lenient: ±32° Abweichung zugelassen
+
+    # 3. Rest zwischen Flanken als Gap / Sub-Gap-Artefakte klassifizieren
+    gap_classifier:
+      enabled: true
+      z_lower_quantile: 0.05
+      x_margin: 0.5
+      separate_sub_gap_artifacts: true
+      gap_width_y_bins: 20
 
 
 # ── Evaluation ───────────────────────────────────────────────────────────────

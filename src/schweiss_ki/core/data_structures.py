@@ -197,11 +197,3 @@ class WeldVolumeModel:
         )
 
 
-# Standard Segmentierungs-Labels (für Phase 3)
-STANDARD_LABELS = {
-    0: "background",
-    1: "workpiece_left",
-    2: "workpiece_right",
-    3: "gap_region",
-    4: "weld_seam",
-}

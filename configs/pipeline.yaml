@@ -89,8 +89,8 @@ preprocessing:
     #    Deaktiviert by default – erst sinnvoll mit realen Scandaten.
     radius_outlier_filter:
       enabled: true
-      min_nb_points: 5       # Mindestanzahl Nachbarn im Radius
-      search_radius: 1.0         # Suchradius in mm
+      min_nb_points: 3       # Mindestanzahl Nachbarn im Radius
+      search_radius: 2.0         # Suchradius in mm
 
     # 3. Voxel-Grid-Downsampling
     #    Gleichmäßige Punktdichte über die gesamte Punktwolke.
@@ -139,7 +139,7 @@ segmentation:
       ransac_threshold: 0.25
       max_iterations: 1000
       ransac_n: 3
-      expected_flank_angle_deg: 30.0  # Flanke zur Vertikalen (60° V-Naht)
+      expected_flank_angle_deg: 45.0  # Flanke zur Vertikalen (90° V-Naht)
       normal_cos_threshold: 0.85      # lenient: ±32° Abweichung zugelassen
 
     # 3. Rest zwischen Flanken als Gap / Sub-Gap-Artefakte klassifizieren

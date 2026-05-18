@@ -25,8 +25,11 @@ output:
 # -----------------------------------------------------------------------------
 cad_conversion:
   enabled: true
-  point_density: null        # null = API-Standard
-
+  target_point_spacing: 0.2     # mm – mittlerer Punktabstand auf der CAD-Oberfläche.
+                                # null = API-Default. Punktanzahl wird automatisch aus
+                                # surface_area abgeleitet (point_count = area / spacing²).
+                                # Faustregel: spacing ≤ Toleranz (0.25 mm) für sinnvolle
+                                # Distanz-Auflösung mit lokaler Ebenenprojektion.
 
 # ── Stage 2: Preprocessing ───────────────────────────────────────────────────
 # Konfigurierbare Chain zur Aufbereitung von Punktwolken.

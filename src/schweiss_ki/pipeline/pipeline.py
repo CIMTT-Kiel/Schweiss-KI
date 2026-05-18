@@ -26,9 +26,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CADConversionConfig:
-    """Konfiguration für CAD-Konvertierung"""
+    """Konfiguration für CAD-Konvertierung.
+
+    target_point_spacing: gewünschter mittlerer Punktabstand auf der CAD-
+        Oberfläche in mm. Aus Bauteil-Oberfläche (analyse_cad) wird
+        point_count = total_area / spacing² abgeleitet und an die API
+        übergeben. None = API-Default-Sampling.
+    """
     enabled: bool = True
-    point_density: Optional[float] = None  # None = API-Standard
+    target_point_spacing: Optional[float] = None
 
 
 @dataclass
@@ -89,7 +95,9 @@ class PipelineConfig:
         if "cad_conversion" in d:
             c = d["cad_conversion"]
             cfg.cad_conversion.enabled = c.get("enabled", cfg.cad_conversion.enabled)
-            cfg.cad_conversion.point_density = c.get("point_density", cfg.cad_conversion.point_density)
+            cfg.cad_conversion.target_point_spacing = c.get(
+                "target_point_spacing", cfg.cad_conversion.target_point_spacing
+            )
 
         if "preprocessing" in d:
             p = d["preprocessing"]
@@ -279,7 +287,12 @@ class Pipeline:
     # ── Interne Stage-Methoden ─────────────────
 
     def _run_cad_conversion(self, step_file: Path) -> o3d.geometry.PointCloud:
-        """Stage 1: STEP → Point Cloud via Michel's API"""
+        """Stage 1: STEP → Point Cloud via Michel's API.
+
+        Wenn target_point_spacing gesetzt ist, wird die benötigte Punktanzahl
+        aus der CAD-Oberfläche abgeleitet (analyse_cad → total_area).
+        Bei Fehler in analyse_cad: Fallback auf API-Default.
+        """
         tmp_ply = (
             self.config.output.output_dir
             / step_file.stem
@@ -287,8 +300,28 @@ class Pipeline:
         )
         tmp_ply.parent.mkdir(parents=True, exist_ok=True)
 
+        kwargs = {}
+        spacing = self.config.cad_conversion.target_point_spacing
+        if spacing is not None:
+            try:
+                analysis = self._cad_client.analyse_cad(str(step_file))
+                total_area = sum(obj["surface_area"] for obj in analysis["objects"])  # mm²
+                point_count = max(1, int(total_area / spacing ** 2))
+                kwargs["point_count"] = point_count
+                logger.info(
+                    f"  CAD-Sampling: spacing={spacing} mm, "
+                    f"area={total_area:.1f} mm² → point_count={point_count:,}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"  analyse_cad fehlgeschlagen ({type(e).__name__}: {e}). "
+                    f"Fallback auf API-Default-Sampling."
+                )
+
         logger.debug(f"  CAD Konvertierung: {step_file} → {tmp_ply}")
-        ply_path = self._cad_client.convert_to_ply(str(step_file), str(tmp_ply))
+        ply_path = self._cad_client.convert_to_ply(
+            str(step_file), str(tmp_ply), **kwargs
+        )
 
         pcd = o3d.io.read_point_cloud(str(ply_path))
         logger.debug(f"  Point Cloud geladen: {len(pcd.points):,} Punkte")

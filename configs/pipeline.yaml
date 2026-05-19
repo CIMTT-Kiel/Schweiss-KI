@@ -45,7 +45,7 @@ cad_conversion:
 # Parameter werden mit realen Scandaten von Heidenbluth validiert und angepasst.
 # -----------------------------------------------------------------------------
 preprocessing:
-  enabled: false             # ← auf true setzen wenn Pipeline-Integration fertig
+  enabled: true             # ← auf true setzen wenn Pipeline-Integration fertig
 
   # ── Source-Type-Overrides ──────────────────────────────────────────────────
   # WeldVolumeModel.source_type bestimmt automatisch welcher Override aktiv ist.
@@ -106,10 +106,10 @@ preprocessing:
     #    Berechnet Oberflächennormalen – Voraussetzung für RANSAC-Segmentierung (Phase 4).
     normal_estimator:
       enabled: true
-      radius: 2.0         # Suchradius für Nachbarpunkte in mm
-      max_nn: 30          # Maximale Nachbarn im Suchradius
-      orient_mode: consistent   # "consistent" oder "camera"
-      # camera_location: [0.0, 0.0, 100.0]  # Nur bei orientation: camera
+      radius: 2.0
+      max_nn: 30
+      orient_mode: camera
+      scan_origin: [0.0, 0.0, 100.0]   # 100mm über dem Werkstück (Scanner-Position)
 
 
 # ── Stage 3: Segmentierung ───────────────────────────────────────────────────

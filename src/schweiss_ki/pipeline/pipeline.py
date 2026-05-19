@@ -16,6 +16,7 @@ from typing import Optional, List
 import open3d as o3d
 
 from ..core.data_structures import WeldVolumeModel
+from schweiss_ki.segmentation import SegmentationPipeline, LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +367,23 @@ class Pipeline:
         )
         return pcd_clean, report
 
-    def _run_segmentation(self, model: WeldVolumeModel):
-        """Stage 3: Segmentierung (Phase 4 – Platzhalter)"""
-        logger.debug("  Segmentierung: noch nicht implementiert (Phase 4)")
+    def _run_segmentation(self, model: WeldVolumeModel) -> None:
+        """Stage 3: Segmentierung der vorverarbeiteten Punktwolke."""
+        if self._config_path is None:
+            logger.warning("  Keine config_path gesetzt, Segmentierung übersprungen")
+            return
+
+        seg_pipeline = SegmentationPipeline.from_config(self._config_path)
+        if len(seg_pipeline.steps) == 0:
+            logger.warning("  Keine Segmentation-Steps in Config aktiviert")
+            return
+
+        labels, report = seg_pipeline.process(model.point_cloud)
+        model.labels = labels
+        model.label_names = {int(k): v for k, v in LABELS.items()}
+        model.segmentation_method = "ransac"
+
+        logger.info(
+                f"  Segmentierung: {len(seg_pipeline.steps)} Steps, "
+                f"coverage {report.coverage_pct:.1f}%"
+            )

@@ -10,10 +10,11 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import open3d as o3d
+import yaml
 
 from ..base import DeviationStep
 from ..reports import DeviationData
@@ -21,15 +22,28 @@ from ..reports import DeviationData
 logger = logging.getLogger(__name__)
 
 
+def _build_step_registry() -> Dict[str, type]:
+    """Lazy import, um Zirkularimporte zu vermeiden."""
+    from .gap_profile import GapProfile
+    return {
+        "gap_profile": GapProfile,
+    }
+
+
 class DeviationPipeline:
     """Verkettete Ausführung mehrerer DeviationSteps.
 
     Nutzung:
         pipeline = DeviationPipeline(
-            steps=[PointDistance(...), PerRegionMetrics(...), ToleranceClassifier(...)],
+            steps=[GapProfile(...)],
             tolerance_mm=0.25,
         )
-        data = pipeline.run(source_aligned, target, source_labels, target_labels)
+        data = pipeline.run(
+            source_aligned, target, source_labels, target_labels,
+        )
+
+    Aus YAML laden:
+        pipeline = DeviationPipeline.from_config(Path("configs/pipeline.yaml"))
     """
 
     def __init__(
@@ -38,7 +52,7 @@ class DeviationPipeline:
         tolerance_mm: float = 0.25,
     ):
         self.steps: List[DeviationStep] = list(steps)
-        self.tolerance_mm = tolerance_mm
+        self.tolerance_mm = float(tolerance_mm)
 
     # ── Ausführung ────────────────────────────────────────────────────
 
@@ -49,17 +63,6 @@ class DeviationPipeline:
         source_labels: Optional[np.ndarray] = None,
         target_labels: Optional[np.ndarray] = None,
     ) -> DeviationData:
-        """Wendet alle Steps nacheinander an, jeder schreibt in `data`.
-
-        Args:
-            source:         Bereits ausgerichteter Scan.
-            target:         CAD-Referenz.
-            source_labels:  Optionale Labels für source (aus AP2.1).
-            target_labels:  Optionale Labels für target.
-
-        Returns:
-            DeviationData mit allen Step-Beiträgen.
-        """
         if len(source.points) == 0:
             raise ValueError("Source PointCloud ist leer.")
         if len(target.points) == 0:
@@ -112,10 +115,46 @@ class DeviationPipeline:
         """Lädt eine Pipeline aus dem Abschnitt 'subtraction.deviation.steps'
         der pipeline.yaml.
 
-        TODO: Implementierung sobald konkrete Steps existieren.
-              Pattern analog zu PreprocessingPipeline.from_config().
+        Erwartetes Format:
+            subtraction:
+              deviation:
+                tolerance_mm: 0.25
+                steps:
+                  gap_profile:
+                    enabled: true
+                    n_bins: 20
+                    edge_margin: 10
+
+        Reihenfolge der Schlüssel = Ausführungsreihenfolge.
         """
-        raise NotImplementedError(
-            "DeviationPipeline.from_config() wird implementiert, "
-            "sobald konkrete Steps existieren."
-        )
+        config_path = Path(config_path)
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+
+        deviation_cfg = cfg.get("subtraction", {}).get("deviation", {})
+        tolerance_mm = float(deviation_cfg.get("tolerance_mm", 0.25))
+        steps_cfg = deviation_cfg.get("steps", {})
+
+        if not steps_cfg:
+            logger.warning(
+                "Kein 'subtraction.deviation.steps'-Block in Config gefunden – "
+                "Pipeline bleibt leer."
+            )
+            return cls(steps=[], tolerance_mm=tolerance_mm)
+
+        registry = _build_step_registry()
+        steps: List[DeviationStep] = []
+
+        for step_name, step_params in steps_cfg.items():
+            if step_name not in registry:
+                logger.warning(
+                    f"Unbekannter Deviation-Step '{step_name}' in Config, "
+                    f"übersprungen. Verfügbar: {sorted(registry.keys())}"
+                )
+                continue
+
+            params: Dict[str, Any] = dict(step_params or {})
+            step_cls = registry[step_name]
+            steps.append(step_cls(**params))
+
+        return cls(steps=steps, tolerance_mm=tolerance_mm)

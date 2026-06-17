@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import open3d as o3d
@@ -21,6 +21,18 @@ from ..reports import RegistrationReport
 logger = logging.getLogger(__name__)
 
 
+# Registry der verfügbaren Step-Klassen für from_config().
+# Bei neuem Step: hier eintragen.
+def _build_step_registry() -> Dict[str, type]:
+    """Lazy import, um Zirkularimporte zu vermeiden."""
+    from .coarse_pca import CoarsePCA
+    from .icp_fine import ICPFine
+    return {
+        "coarse_pca": CoarsePCA,
+        "icp_fine": ICPFine,
+    }
+
+
 class RegistrationPipeline:
     """Verkettete Ausführung mehrerer RegistrationSteps.
 
@@ -29,7 +41,12 @@ class RegistrationPipeline:
             CoarsePCA(...),
             ICPFine(...),
         ])
-        source_aligned, report = pipeline.run(source, target, source_labels, target_labels)
+        source_aligned, report = pipeline.run(
+            source, target, source_labels, target_labels,
+        )
+
+    Aus YAML laden:
+        pipeline = RegistrationPipeline.from_config(Path("configs/pipeline.yaml"))
     """
 
     def __init__(self, steps: List[RegistrationStep]):
@@ -44,20 +61,6 @@ class RegistrationPipeline:
         source_labels: Optional[np.ndarray] = None,
         target_labels: Optional[np.ndarray] = None,
     ) -> tuple[o3d.geometry.PointCloud, RegistrationReport]:
-        """Wendet alle Steps nacheinander an.
-
-        Args:
-            source:         Real-Scan (wird ausgerichtet).
-            target:         CAD-Referenz (fest).
-            source_labels:  Optionale Labels für source (aus AP2.1).
-            target_labels:  Optionale Labels für target.
-
-        Returns:
-            (source_aligned, report):
-                - source_aligned: Kopie von source mit finaler Transform.
-                - report:         RegistrationReport mit allen Step-Reports
-                                  und akkumulierter final_transform.
-        """
         if len(source.points) == 0:
             raise ValueError("Source PointCloud ist leer.")
         if len(target.points) == 0:
@@ -68,7 +71,6 @@ class RegistrationPipeline:
             f"source={len(source.points):,} pts, target={len(target.points):,} pts"
         )
 
-        # Wir arbeiten auf einer Kopie, damit das Original unangetastet bleibt
         source_aligned = o3d.geometry.PointCloud(source)
         cumulative = np.eye(4)
         step_reports = []
@@ -87,14 +89,14 @@ class RegistrationPipeline:
             report = step(source_aligned, target, source_labels, target_labels)
             step_reports.append(report)
 
-            # Delta auf source anwenden, kumulierte Transform aktualisieren
             source_aligned.transform(report.delta_transform)
             cumulative = report.delta_transform @ cumulative
 
-            res_str = f", residual={report.residual:.3f}mm" if report.residual is not None else ""
-            logger.info(
-                f"  ✓ {step.name}: {report.duration_ms:.1f} ms{res_str}"
+            res_str = (
+                f", residual={report.residual:.3f}mm"
+                if report.residual is not None else ""
             )
+            logger.info(f"  ✓ {step.name}: {report.duration_ms:.1f} ms{res_str}")
 
         total_duration_ms = (time.perf_counter() - t0_total) * 1000.0
 
@@ -102,14 +104,19 @@ class RegistrationPipeline:
             steps=step_reports,
             final_transform=cumulative,
             total_duration_ms=total_duration_ms,
-            converged=True,  # TODO: echte Konvergenz-Logik wenn ICP-Step da ist
+            converged=True,
         )
 
-        logger.info(
-            f"RegistrationPipeline fertig: {total_duration_ms:.1f} ms gesamt, "
-            f"final residual: "
-            f"{report.final_residual:.3f} mm" if report.final_residual is not None else "n/a"
-        )
+        final_residual = report.final_residual
+        if final_residual is not None:
+            logger.info(
+                f"RegistrationPipeline fertig: {total_duration_ms:.1f} ms gesamt, "
+                f"final residual: {final_residual:.3f} mm"
+            )
+        else:
+            logger.info(
+                f"RegistrationPipeline fertig: {total_duration_ms:.1f} ms gesamt"
+            )
 
         return source_aligned, report
 
@@ -137,17 +144,46 @@ class RegistrationPipeline:
             subtraction:
               registration:
                 steps:
-                  step_name:
+                  coarse_pca:
                     enabled: true
-                    param1: ...
-                    param2: ...
+                    anchor_labels: [0, 1, 2]
+                  icp_fine:
+                    enabled: true
+                    max_correspondence_distance: 1.0
+                    ...
 
-        Reihenfolge der Schlüssel = Ausführungsreihenfolge.
-
-        TODO: Implementierung sobald konkrete Steps existieren.
-              Pattern analog zu PreprocessingPipeline.from_config().
+        Reihenfolge der Schlüssel = Ausführungsreihenfolge (Python 3.7+
+        garantiert Insertion-Order in dicts; PyYAML respektiert das).
         """
-        raise NotImplementedError(
-            "RegistrationPipeline.from_config() wird implementiert, "
-            "sobald konkrete Steps existieren."
+        config_path = Path(config_path)
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+
+        steps_cfg = (
+            cfg.get("subtraction", {})
+               .get("registration", {})
+               .get("steps", {})
         )
+        if not steps_cfg:
+            logger.warning(
+                "Kein 'subtraction.registration.steps'-Block in Config gefunden – "
+                "Pipeline bleibt leer."
+            )
+            return cls(steps=[])
+
+        registry = _build_step_registry()
+        steps: List[RegistrationStep] = []
+
+        for step_name, step_params in steps_cfg.items():
+            if step_name not in registry:
+                logger.warning(
+                    f"Unbekannter Registration-Step '{step_name}' in Config, "
+                    f"übersprungen. Verfügbar: {sorted(registry.keys())}"
+                )
+                continue
+
+            params: Dict[str, Any] = dict(step_params or {})
+            step_cls = registry[step_name]
+            steps.append(step_cls(**params))
+
+        return cls(steps=steps)

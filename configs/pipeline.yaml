@@ -1,12 +1,14 @@
 # =============================================================================
 # Schweiß-KI Pipeline Konfiguration
 # AP2.1 - Optimierter Datenfluss: STEP → Segmentierte Punktwolke
+# AP2.2 - Subtraktionsmethode: Scan ↔ CAD Vergleich
 # =============================================================================
 # Phasen:
 #   Phase 1 (KW 06-08): CAD-Konvertierung + WeldVolumeModel         ← abgeschlossen
 #   Phase 2 (KW 09-11): Preprocessing                               ← aktiv
-#   Phase 3 (KW 10-15): Segmentierung (RANSAC)                      ← noch nicht aktiv
+#   Phase 3 (KW 10-15): Segmentierung (RANSAC)                      ← aktiv
 #   Phase 4 (KW 13-14): Segmentierung (PointNet) - optional         ← noch nicht aktiv
+#   Phase 5 (KW 15-…):  Subtraktion (Registrierung + Differenz)     ← aktiv
 # =============================================================================
 
 # Eingabeverzeichnis mit STEP-Dateien
@@ -14,7 +16,7 @@ input_dir: data/synthetic/test_step_files
 
 # Output-Konfiguration
 output:
-  output_dir: data/processed/test_files
+  output_dir: data/outputs
   save_model: true
   save_intermediate: false   # Zwischenschritte speichern (für Debugging)
 
@@ -152,6 +154,65 @@ segmentation:
       x_margin: 0.5
       separate_sub_gap_artifacts: true
       gap_width_y_bins: 20
+
+
+# ── Stage 4: Subtraktion (AP2.2) ─────────────────────────────────────────────
+# Vergleich segmentierter Scan-Wolke gegen CAD-Referenz.
+# Status: aktiv (Phase 5)
+#
+# Ablauf:
+#   1. Registrierung: Scan in CAD-Koordinatensystem überführen (CoarsePCA → ICPFine)
+#   2. Deviation: Geometrische Abweichungen quantifizieren (GapProfile, ...)
+#
+# Reihenfolge der Schlüssel innerhalb von 'steps:' = Ausführungsreihenfolge.
+# -----------------------------------------------------------------------------
+subtraction:
+  enabled: true
+
+  # ── Registrierung ──────────────────────────────────────────────────────────
+  registration:
+    steps:
+
+      # 1. Grob-Registrierung via PCA
+      #    Richtet Hauptachsen aufeinander aus, löst Vorzeichen-Ambiguität
+      #    über vier Kandidaten-Auswertungen. Liefert Init für ICP.
+      coarse_pca:
+        enabled: true
+        anchor_labels: [0, 1, 2]      # Background + Flanken, ohne Spalt
+        evaluation_samples: 5000      # Source-Subsample für Kandidaten-Ranking
+        random_seed: 0
+
+      # 2. Fein-Registrierung via Point-to-Plane ICP
+      #    Korrigiert den Translations-Rest, den PCA prinzipbedingt nicht löst
+      #    (V-Naht ist über die Längsrichtung rotationssymmetrisch).
+      icp_fine:
+        enabled: true
+        max_correspondence_distance: 1.0   # mm – Maximaler NN-Abstand für Korrespondenzen
+        max_iteration: 50
+        relative_fitness: 1.0e-6           # Konvergenzschwelle Fitness-Änderung
+        relative_rmse: 1.0e-6              # Konvergenzschwelle RMSE-Änderung
+        anchor_labels: [0, 1, 2]
+        evaluation_samples: 5000
+        random_seed: 0
+
+  # ── Differenzanalyse ───────────────────────────────────────────────────────
+  deviation:
+    tolerance_mm: 0.25     # Globale Toleranzschwelle für In-/Out-of-Tolerance-Bewertung
+
+    steps:
+
+      # Wurzelspalt-Profil entlang der Naht-Längsrichtung
+      # Methodik: lineare Extrapolation der Flanken auf z=0
+      gap_profile:
+        enabled: true
+        flank_a_label: 1
+        flank_b_label: 2
+        seam_axis: 0              # 0=X (Naht-Längsrichtung im CAD-Koordinatensystem)
+        gap_axis: 1               # 1=Y (Spalt-Querrichtung)
+        vertical_axis: 2          # 2=Z (Tiefe, Extrapolation auf z=0)
+        n_bins: 20
+        edge_margin: 10.0         # mm an beiden Enden ausgenommen (Heftpunkte)
+        min_points_per_bin: 3
 
 
 # ── Evaluation ───────────────────────────────────────────────────────────────

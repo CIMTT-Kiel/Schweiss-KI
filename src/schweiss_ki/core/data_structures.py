@@ -1,5 +1,5 @@
 """
-Datenstrukturen für Schweiß-KI AP2.1
+Datenstrukturen für Schweiß-KI
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import open3d as o3d
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..preprocessing.base import PreprocessingReport
+    from ..subtraction.reports import SubtractionReport
 
 
 @dataclass
@@ -24,12 +25,14 @@ class WeldVolumeModel:
     3D-Volumenmodell eines Schweißobjekts.
 
     Repräsentiert Point Cloud + Metadaten für Ideal/Real/Synthetic Models.
-    Dient als zentrale Datenstruktur für Pipeline, Preprocessing und Segmentierung.
+    Dient als zentrale Datenstruktur für Pipeline, Preprocessing, Segmentierung
+    und Subtraktion (AP2.2).
 
     Struktur:
     - Identifikation: model_id, source_type, timestamp
     - Geometrie: point_cloud, cad_analysis (optional)
-    - Segmentierung: labels, label_names, segmentation_method (Phase 3-4)
+    - Segmentierung: labels, label_names, segmentation_method
+    - Subtraktion: subtraction_report (Registrierung + Differenzanalyse)
     - Metadaten: n_points, density, preprocessing_report
     """
 
@@ -52,6 +55,9 @@ class WeldVolumeModel:
     n_points: int = 0
     density: Optional[float] = None  # Punkte pro mm³
     preprocessing_report: Optional[Any] = None  # PreprocessingReport (Any für keine Zirkularimporte)
+
+    # === Subtraktion (AP2.2) ===
+    subtraction_report: Optional[Any] = None  # SubtractionReport (Any für keine Zirkularimporte)
 
     # Extra Metadaten (flexibel)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -85,6 +91,10 @@ class WeldVolumeModel:
     def has_preprocessing(self) -> bool:
         return self.preprocessing_report is not None
 
+    @property
+    def has_subtraction(self) -> bool:
+        return self.subtraction_report is not None
+
     def update_point_cloud(self, pcd: o3d.geometry.PointCloud) -> None:
         """
         Ersetzt die Punktwolke und aktualisiert n_points und density.
@@ -102,7 +112,8 @@ class WeldVolumeModel:
 
         output_dir/model_id/
         ├── pointcloud.ply
-        ├── labels.npy       (optional)
+        ├── labels.npy              (optional)
+        ├── subtraction_report.json (optional)
         └── metadata.json
         """
         output_dir = Path(output_dir)
@@ -133,6 +144,7 @@ class WeldVolumeModel:
                 if self.preprocessing_report is not None
                 else None
             ),
+            "has_subtraction": self.has_subtraction,
             "metadata": self.metadata,
         }
 
@@ -140,6 +152,17 @@ class WeldVolumeModel:
             labels_file = model_dir / "labels.npy"
             np.save(labels_file, self.labels)
             metadata_dict["labels_file"] = "labels.npy"
+
+        # Subtraktions-Report separat als JSON ablegen, damit metadata.json
+        # nicht durch große Distanz-/Transform-Strukturen aufgebläht wird.
+        if self.subtraction_report is not None:
+            subtraction_file = model_dir / "subtraction_report.json"
+            with open(subtraction_file, "w") as f:
+                json.dump(
+                    self.subtraction_report.to_dict(),
+                    f, indent=2, default=str,
+                )
+            metadata_dict["subtraction_file"] = "subtraction_report.json"
 
         with open(meta_file, "w") as f:
             json.dump(metadata_dict, f, indent=2)
@@ -171,6 +194,25 @@ class WeldVolumeModel:
                 meta["preprocessing_report"]
             )
 
+        # Subtraktions-Report laden, falls vorhanden.
+        # Aktuell wird nur eine minimale Hülle rekonstruiert (cad_source_file).
+        # Die vollständigen Roh-Daten landen in metadata["subtraction_report_raw"]
+        # und können bei Bedarf weiter ausgewertet werden. Eine vollständige
+        # SubtractionReport.from_dict()-Deserialisierung kann später ergänzt
+        # werden, wenn z.B. Distanz-Arrays mit gespeichert werden sollen.
+        subtraction_report = None
+        extra_metadata: Dict[str, Any] = dict(meta.get("metadata", {}))
+        if "subtraction_file" in meta:
+            subtraction_file = model_dir / meta["subtraction_file"]
+            if subtraction_file.exists():
+                from ..subtraction.reports import SubtractionReport
+                with open(subtraction_file, "r") as f:
+                    sub_data = json.load(f)
+                subtraction_report = SubtractionReport(
+                    cad_source_file=sub_data.get("cad_source_file"),
+                )
+                extra_metadata["subtraction_report_raw"] = sub_data
+
         return cls(
             model_id=meta["model_id"],
             source_type=meta["source_type"],
@@ -184,7 +226,8 @@ class WeldVolumeModel:
             n_points=meta["n_points"],
             density=meta.get("density"),
             preprocessing_report=preprocessing_report,
-            metadata=meta.get("metadata", {}),
+            subtraction_report=subtraction_report,
+            metadata=extra_metadata,
         )
 
     def __repr__(self) -> str:
@@ -193,7 +236,6 @@ class WeldVolumeModel:
             f"type='{self.source_type}', "
             f"points={self.n_points:,}, "
             f"preprocessed={self.has_preprocessing}, "
-            f"segmented={self.has_segmentation})"
+            f"segmented={self.has_segmentation}, "
+            f"subtracted={self.has_subtraction})"
         )
-
-

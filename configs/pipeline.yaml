@@ -201,6 +201,29 @@ subtraction:
 
     steps:
 
+      # Allgemeine Punkt-zu-CAD-Distanz mit globalen und per-Label-Aggregaten
+      # Bauteilunabhängig – Basis für AP2.2-Validierung.
+      point_distance:
+        enabled: true
+        max_distance: 5.0   # mm – Punkte mit |d| > max_distance werden als
+                            # Ausreißer behandelt (z.B. Sub-Gap-Artefakte
+                            # ohne CAD-Pendant) und nicht in die Aggregate
+                            # aufgenommen.
+
+      voxel_deviation:
+        enabled: true
+        voxel_size_mm: 5.0
+        min_points_per_voxel: 3
+
+      component_registration:
+        enabled: true
+        split_axis: 1
+        split_value: 0.0
+        component_a_side: positive
+        icp_max_correspondence_distance: 0.5   # eng, da Ausgangslage schon gut
+        icp_max_iteration: 50
+        icp_anchor_labels: [0, 1, 2]
+
       # Wurzelspalt-Profil entlang der Naht-Längsrichtung
       # Methodik: lineare Extrapolation der Flanken auf z=0
       gap_profile:

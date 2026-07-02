@@ -1,9 +1,8 @@
 """
 DeviationPipeline – orchestriert eine Sequenz von DeviationSteps.
 
-Im Gegensatz zur Registrierung akkumulieren Deviation-Steps nicht eine
-Transformation, sondern befüllen ein gemeinsames DeviationData-Objekt
-(signed distances, per-region-metrics, gap profile, ...).
+Steps befüllen ein gemeinsames DeviationData-Objekt (signed distances,
+per-region-metrics, voxel_deviation, component_registration, gap_profile).
 """
 from __future__ import annotations
 
@@ -23,28 +22,20 @@ logger = logging.getLogger(__name__)
 
 
 def _build_step_registry() -> Dict[str, type]:
-    """Lazy import, um Zirkularimporte zu vermeiden."""
+    from .component_registration import ComponentRegistration
     from .gap_profile import GapProfile
+    from .point_distance import PointDistance
+    from .voxel_deviation import VoxelDeviation
     return {
+        "point_distance": PointDistance,
+        "voxel_deviation": VoxelDeviation,
+        "component_registration": ComponentRegistration,
         "gap_profile": GapProfile,
     }
 
 
 class DeviationPipeline:
-    """Verkettete Ausführung mehrerer DeviationSteps.
-
-    Nutzung:
-        pipeline = DeviationPipeline(
-            steps=[GapProfile(...)],
-            tolerance_mm=0.25,
-        )
-        data = pipeline.run(
-            source_aligned, target, source_labels, target_labels,
-        )
-
-    Aus YAML laden:
-        pipeline = DeviationPipeline.from_config(Path("configs/pipeline.yaml"))
-    """
+    """Verkettete Ausführung mehrerer DeviationSteps."""
 
     def __init__(
         self,
@@ -53,8 +44,6 @@ class DeviationPipeline:
     ):
         self.steps: List[DeviationStep] = list(steps)
         self.tolerance_mm = float(tolerance_mm)
-
-    # ── Ausführung ────────────────────────────────────────────────────
 
     def run(
         self,
@@ -95,8 +84,6 @@ class DeviationPipeline:
 
         return data
 
-    # ── Verkettung / Inspektion ───────────────────────────────────────
-
     def add(self, step: DeviationStep) -> "DeviationPipeline":
         self.steps.append(step)
         return self
@@ -108,24 +95,12 @@ class DeviationPipeline:
         names = ", ".join(s.name for s in self.steps)
         return f"DeviationPipeline([{names}], tol=±{self.tolerance_mm}mm)"
 
-    # ── YAML-Loading ──────────────────────────────────────────────────
-
     @classmethod
     def from_config(cls, config_path: Path) -> "DeviationPipeline":
-        """Lädt eine Pipeline aus dem Abschnitt 'subtraction.deviation.steps'
-        der pipeline.yaml.
+        """Lädt Pipeline aus 'subtraction.deviation.steps' der pipeline.yaml.
 
-        Erwartetes Format:
-            subtraction:
-              deviation:
-                tolerance_mm: 0.25
-                steps:
-                  gap_profile:
-                    enabled: true
-                    n_bins: 20
-                    edge_margin: 10
-
-        Reihenfolge der Schlüssel = Ausführungsreihenfolge.
+        Reihenfolge der Schlüssel = Ausführungsreihenfolge. Wichtig:
+        voxel_deviation braucht point_distance vorher.
         """
         config_path = Path(config_path)
         with open(config_path) as f:

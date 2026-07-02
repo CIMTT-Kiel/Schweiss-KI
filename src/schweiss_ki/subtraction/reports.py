@@ -153,6 +153,8 @@ class DeviationData:
     tolerance_mm: float = 0.25
     per_region_metrics: Dict[int, Dict[str, float]] = field(default_factory=dict)
     gap_profile: Optional[Dict[str, np.ndarray]] = None
+    voxel_deviation: Optional[Dict[str, Any]] = None
+    component_registration: Optional[Dict[str, Any]] = None
     step_reports: List[DeviationStepReport] = field(default_factory=list)
     total_duration_ms: float = 0.0
 

@@ -188,16 +188,36 @@ class DeviationData:
             )
         return "\n".join(lines)
 
-    def to_dict(self) -> dict:
-        return {
-            "n_points": len(self.distances_signed),
+    def to_dict(self) -> Dict[str, Any]:
+        """Für JSON-Serialisierung. numpy-Arrays werden zu Listen konvertiert."""
+        result = {
+            "n_points": len(self.distances_signed) if self.distances_signed is not None else 0,
             "tolerance_mm": self.tolerance_mm,
             "overall_in_tolerance_rate": self.overall_in_tolerance_rate,
             "per_region_metrics": self.per_region_metrics,
             "step_reports": [s.to_dict() for s in self.step_reports],
             "total_duration_ms": self.total_duration_ms,
-            # distances_signed/in_tolerance werden separat als .npy gespeichert
         }
+
+        # ComponentRegistration – ist bereits ein flaches Dict mit Listen
+        if self.component_registration is not None:
+            result["component_registration"] = self.component_registration
+
+        # VoxelDeviation – numpy-Arrays zu Listen konvertieren
+        if self.voxel_deviation is not None:
+            vd = self.voxel_deviation
+            result["voxel_deviation"] = {
+                "voxel_size_mm": vd.get("voxel_size_mm"),
+                "n_voxels": len(vd.get("counts", [])),
+                "centers": vd["centers"].tolist() if vd.get("centers") is not None else [],
+                "counts": vd["counts"].tolist() if vd.get("counts") is not None else [],
+                "mean_signed": vd["mean_signed"].tolist() if vd.get("mean_signed") is not None else [],
+                "mean_abs": vd["mean_abs"].tolist() if vd.get("mean_abs") is not None else [],
+                "rms": vd["rms"].tolist() if vd.get("rms") is not None else [],
+                "in_tolerance_rate": vd["in_tolerance_rate"].tolist() if vd.get("in_tolerance_rate") is not None else [],
+            }
+
+        return result
 
 
 # ─────────────────────────────────────────────────────────────────────────

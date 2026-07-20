@@ -165,15 +165,41 @@ class ComponentRegistration(DeviationStep):
         # Relative Transformation: T_rel = T_b · T_a⁻¹
         T_rel = T_b @ np.linalg.inv(T_a)
 
-        # Zerlegung in Translation + Rotation (Euler XYZ, Grad)
-        translation = T_rel[:3, 3]
-        rotation_deg = self._rotation_matrix_to_euler_xyz_deg(T_rel[:3, :3])
+        # Rotationsanteil und roher Translationsanteil aus T_rel
+        R_rel = T_rel[:3, :3]
+        t_raw = T_rel[:3, 3]
+        rotation_deg = self._rotation_matrix_to_euler_xyz_deg(R_rel)
+
+        # Zerlegung der Translation um den Werkstück-B-Schwerpunkt:
+        #
+        # Die T_rel[:3, 3]-Komponente enthält bei Rotationen um den Ursprung
+        # zusätzlich einen Anteil, der durch die Verschiebung des Werkstück-
+        # Schwerpunkts zustande kommt (Off-Center-Rotation). Für eine
+        # sauber interpretierbare Zerlegung wird dieser Anteil abgezogen:
+        #
+        #   t_pure = t_raw - (I - R_rel) · c_B
+        #
+        # wobei c_B der Schwerpunkt des Werkstück-B-Targets ist.
+        # Damit gilt: bei reiner Rotation ist t_pure ≈ 0, bei reiner
+        # Translation ist t_pure = t_raw.
+        target_b_center = np.mean(np.asarray(target_b.points), axis=0)
+        t_pure = t_raw - (np.eye(3) - R_rel) @ target_b_center
 
         result = {
             "translation_mm": {
-                "x": float(translation[0]),
-                "y": float(translation[1]),
-                "z": float(translation[2]),
+                "x": float(t_pure[0]),
+                "y": float(t_pure[1]),
+                "z": float(t_pure[2]),
+            },
+            "translation_raw_mm": {
+                "x": float(t_raw[0]),
+                "y": float(t_raw[1]),
+                "z": float(t_raw[2]),
+            },
+            "rotation_center_mm": {
+                "x": float(target_b_center[0]),
+                "y": float(target_b_center[1]),
+                "z": float(target_b_center[2]),
             },
             "rotation_deg": {
                 "x": float(rotation_deg[0]),
@@ -196,15 +222,16 @@ class ComponentRegistration(DeviationStep):
             f"B={report_b.final_residual:.3f}mm"
         )
         logger.info(
-            f"    Relative Lage: "
-            f"Δx={translation[0]:+.3f}mm, Δy={translation[1]:+.3f}mm, "
-            f"Δz={translation[2]:+.3f}mm | "
+            f"    Relative Lage (Rotation um Werkstück-B-Schwerpunkt): "
+            f"Δx={t_pure[0]:+.3f}mm, Δy={t_pure[1]:+.3f}mm, "
+            f"Δz={t_pure[2]:+.3f}mm | "
             f"rot_x={rotation_deg[0]:+.3f}°, rot_y={rotation_deg[1]:+.3f}°, "
             f"rot_z={rotation_deg[2]:+.3f}°"
         )
 
         return {
             "translation_mm": result["translation_mm"],
+            "translation_raw_mm": result["translation_raw_mm"],
             "rotation_deg": result["rotation_deg"],
             "residual_a_mm": report_a.final_residual,
             "residual_b_mm": report_b.final_residual,

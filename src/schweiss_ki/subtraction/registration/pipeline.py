@@ -26,9 +26,11 @@ logger = logging.getLogger(__name__)
 def _build_step_registry() -> Dict[str, type]:
     """Lazy import, um Zirkularimporte zu vermeiden."""
     from .coarse_pca import CoarsePCA
+    from .x_edge_align import XEdgeAlign
     from .icp_fine import ICPFine
     return {
         "coarse_pca": CoarsePCA,
+        "x_edge_align": XEdgeAlign,
         "icp_fine": ICPFine,
     }
 

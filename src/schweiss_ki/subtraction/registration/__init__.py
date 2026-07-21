@@ -10,9 +10,11 @@ from __future__ import annotations
 from .coarse_pca import CoarsePCA
 from .icp_fine import ICPFine
 from .pipeline import RegistrationPipeline
+from .x_edge_align import XEdgeAlign
 
 __all__ = [
     "RegistrationPipeline",
     "CoarsePCA",
     "ICPFine",
+    "XEdgeAlign",
 ]

@@ -182,6 +182,12 @@ subtraction:
         evaluation_samples: 5000      # Source-Subsample für Kandidaten-Ranking
         random_seed: 0
 
+      x_edge_align:
+        enabled: true
+        bin_width_mm: 0.5
+        min_points_per_bin: 20
+        anchor_labels: [0, 1, 2]      
+
       # 2. Fein-Registrierung via Point-to-Plane ICP
       #    Korrigiert den Translations-Rest, den PCA prinzipbedingt nicht löst
       #    (V-Naht ist über die Längsrichtung rotationssymmetrisch).

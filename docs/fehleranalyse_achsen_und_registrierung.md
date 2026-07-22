@@ -148,9 +148,87 @@ Für synthetische Daten ist das Preprocessing jetzt komplett abgeschaltet
 aus Performance- oder Dichtegründen downgesampelt wird — dort aber vom
 Messrauschen maskiert. Siehe Abschnitt 5.
 
+### 3.5 Ein Deckflächen-Fit für zwei Werkstücke (`139a528`)
+
+`background_remover` fittete **eine** Ebene über beide Deckflächen. Sobald die
+Werkstücke gegeneinander verkippt sind, findet RANSAC damit die dominante Hälfte
+und behandelt die andere als Ausreißer:
+
+| `R_Y_+01.000deg` | Punkte |
+|---|---|
+| Deckflächenpunkte gesamt | 435.483 |
+| in der gefundenen Ebene | 251.284 |
+| durchgefallen | **184.199 (42 %)** |
+
+Die durchgefallenen Punkte bekamen Label 0 erst am Pipeline-Ende über
+`fill_unlabeled_with_background` — also über das Sicherheitsnetz statt über eine
+Klassifikation.
+
+**Behebung:** zwei getrennte Fits, aufgeteilt am Vorzeichen der `gap_axis`
+(`split_gap_axis`, Default 1 = Y, passend zu `component_registration`). Je Seite
+werden Ebene, Neigung und Inlier-Zahl ausgewiesen, dazu die relative Verkippung
+beider Ebenen als eigenes Merkmal. `split_gap_axis=None` stellt das alte
+Verhalten wieder her.
+
+#### Der Nebeneffekt: Nichtdeterminismus zwischen Läufen
+
+Zwei Läufe desselben Datensatzes lieferten nicht exakt dieselben Zahlen — anfangs
+0.013 mm Drift in 14 von 61 Fällen. Die Diagnose lief zunächst in die falsche
+Richtung: RANSAC ist zufällig, also fehlt ein Seed. Ein Seed reduzierte den Drift
+(auf 0.004 mm), beseitigte ihn aber nicht. Auch eine Fixierung der
+OpenMP-Threadzahl wurde geprüft und wieder verworfen — im realistischen Aufbau
+war der ungedrosselte Default über 3 Prozesse × 30 Läufe selbst bitgleich, die
+Maßnahme hätte also nichts belegt.
+
+**Die eigentliche Ursache war der Ein-Ebenen-Fit oben.** Die Streuung kam nicht
+aus RANSACs Zufallsstichprobe, sondern aus der **Mehrdeutigkeit**: Bei zwei
+konkurrierenden Deckflächen musste der gemeinsame Fit zwischen ihnen wählen, und
+die Wahl fiel je nach Stichprobe anders aus. Je Seite getrennt gefittet gibt es
+nur eine Ebene — und die findet RANSAC stabil.
+
+Gemessen an `R_Y_+01.000deg`, 12 Läufe mit *wechselnden* Seeds:
+
+| | Ergebnisse | Spanne |
+|---|---|---|
+| ein gemeinsamer Fit | 12 verschiedene | 0.016 mm |
+| zwei getrennte Fits | **1** | **0.000 mm** |
+
+`C_TR_08` und `T_X_+00.100mm` waren in beiden Varianten stabil — der Effekt trat
+ausschließlich bei verkippten Werkstücken auf, also genau dort, wo zwei
+Deckflächen konkurrierten.
+
+**Bestätigt über den vollen Batch-Pfad**, zwei komplette Läufe mit gleichem Seed:
+
+| | identische Fälle | max. Abweichung |
+|---|---|---|
+| vor dem Fix | 47/61 | 0.013 mm |
+| nach dem Fix | **61/61** | **0.000000 mm** |
+
+Bitgleich in jeder Spalte: Spaltwerte, Registrierungs-Residuen,
+`inlier_ratio`, Bin-Zahlen.
+
+**Konsequenz für die Reproduzierbarkeit:** Das Ergebnis hängt nicht mehr am Seed.
+Die Seed-Infrastruktur (`core/reproducibility.py`, `random_seed` in der Config,
+`--seed`, effektiver Seed je Modell im Report) bleibt, weil sie protokolliert,
+womit ein Ergebnis entstand — für den Determinismus ist sie aber nicht mehr
+tragend. Abgesichert durch `tests/test_reproducibility.py`, dessen Gegenprobe
+explizit den alten Ein-Ebenen-Fit prüft und damit belegt, dass die Mehrdeutigkeit
+die Ursache war.
+
+**Lehre für die Diagnose:** Von „zwei Läufe, andere Zahlen" wurde direkt auf die
+naheliegende Erklärung geschlossen (RANSAC ist zufällig → Seed fehlt), statt zu
+prüfen, ob die Ursache eine Modellierungsebene höher liegt. Fünf Messrunden für
+einen Effekt bei 5 % der Toleranz; der später ohnehin geplante Aufräum-Commit
+löste ihn nebenbei.
+
 ---
 
 ## 4. Der Verstärkungsmechanismus der Spaltmessung
+
+> **Behoben** (`4a8bbae`) — die Auswertungshöhe ist jetzt an der
+> Deckflächen-Ebene verankert. Der Abschnitt beschreibt den Mechanismus, weil er
+> für andere Öffnungswinkel und für die realen Scans relevant bleibt; die
+> verbleibende Abhängigkeit steht in 5.4.
 
 Nach allen obigen Fixes blieb eine Untererfassung von ~3.6 %. Zwei
 Fehlzuordnungen meinerseits, beide später korrigiert:
@@ -207,6 +285,45 @@ der Naht (`dz_eff = dz − x̄·sin(ry_reg)`):
 
 Je spitzer die Naht, desto stärker verstärkt sie Registrierungsfehler.
 
+### 4.1 Behebung: Verankerung an der Deckflächen-Ebene (`4a8bbae`)
+
+Die Auswertungshöhe zielt nicht mehr auf `vertical_axis = 0`, sondern auf die
+aus dem Scan gefittete Deckflächen-Ebene des Referenz-Werkstücks. Damit fällt
+`dz` strukturell heraus, statt verdoppelt einzugehen.
+
+Registrierungseinfluss, isoliert gemessen (registriert gegen unregistriert):
+
+| Kategorie | n | max\|e\| vorher | max\|e\| nachher |
+|---|---|---|---|
+| `rotation_x` | 10 | 0.9421 | **0.0004** |
+| `rotation_y` | 4 | 0.8488 | **0.0037** |
+| `translation_z` | 4 | 0.9871 | **0.0012** |
+| `rotation_combo` | 5 | 1.2979 | **0.0078** |
+| **alle** | **61** | **1.2979** | **0.0078** |
+| RMS | | 0.4154 | **0.0017** |
+| innerhalb 0.25 mm | | 63.9 % | **100 %** |
+
+Auch `ry ≥ 1.0°` ist mit abgeräumt, obwohl dort die Registrierung qualitativ
+einbricht (5.1): Der Einbruch ist eine Starrkörper-Fehlstellung, und gegen die
+ist die verankerte Messung invariant — unabhängig von ihrer Größe.
+
+Weitere Konsequenzen der Umstellung:
+
+- Die Spaltbreite ist als Funktion der **Tiefe unter der Referenz-Deckfläche**
+  parametrisiert, nicht als Einzelwert. Ausgegeben werden je Flanke und Bin
+  Achsenabschnitt, Steigung und Gütemaß — daraus lassen sich Flankenwinkel
+  (gemessen, nicht vorausgesetzt), Asymmetrie zwischen den Flanken und der
+  Wurzelspalt ableiten.
+- Der Wurzelspalt ist ein **Messwert** an der tiefsten beidseitig besetzten
+  Tiefe, keine Extrapolation. Verbleibender systematischer Offset: −0.019 mm
+  aus dem P95-Schnitt bei `d_root`, konstant und ohne Streuung.
+- Die Lage des Gegen-Werkstücks relativ zur Referenz (Höhenversatz, Verkippung)
+  wird als eigenes Qualitätsmerkmal ausgegeben — es bildet Kantenversatz ab und
+  wird **nicht** in die Höhenreferenz eingemittelt.
+- Abgesichert durch einen `dz`-Invarianztest (Toleranz 1e-6) mit Gegenprobe,
+  dass die alte Methode den `−2·dz`-Effekt zeigt. Mutationstest: Verankerung
+  ausgehebelt → 7 Tests fallen.
+
 ---
 
 ## 5. Verbleibende Einschränkungen
@@ -222,6 +339,13 @@ tatsächlich). Betrifft auch alle Kombinationsfälle mit `ry`-Anteil.
 noch Flanken-Paarung. Über `ry = 0 … 1.0°` bleiben die
 `FlankSegmenter`-Kandidatenzahlen stabil (33.545 → 31.938, −5 %) und alle 20
 Naht-Bins sehen durchgehend **beide** Flanken — kein einziger einseitiger Slice.
+
+**Folge für die Spaltmessung: keine.** Der Einbruch ist eine
+Starrkörper-Fehlstellung, und gegen die ist die verankerte Messung invariant
+(4.1) — unabhängig von ihrer Größe. Der Registrierungseinfluss liegt auch bei
+`rotation_y` bei max. 0.0037 mm. Betroffen bleibt allein, wie gut Scan und CAD
+zueinander liegen (Reg-Residuum 0.482 statt ~0.12 mm), was für
+`point_distance` und `voxel_deviation` relevant ist, nicht für den Wurzelspalt.
 
 Solange `ry` in der Praxis klein bleibt, ist das eine dokumentierte
 Verfahrensgrenze, kein Blocker.
@@ -244,28 +368,30 @@ Siehe 3.4. Der Bias verschwindet nicht, er wird nur unsichtbar. Robuster Ersatz
 für `.max()` / `.min()`: Perzentile (99./1.) oder ein Flankenebenen-Fit je
 Slice, der nicht an einzelnen Randpunkten hängt.
 
-### 5.4 Auswertungshöhe verankern — verlagert die Abhängigkeit
+### 5.4 Die Abhängigkeit ist verlagert, nicht beseitigt
 
-Der naheliegende Fix für Abschnitt 4 ist, die Auswertungshöhe an der
-RANSAC-Deckflächenebene zu verankern statt an `z = 0`. Damit fällt `dz`
-vollständig heraus, und **alles außer `ry ≥ 1.0°`** wäre abgeräumt.
+Der Fix aus Abschnitt 4.1 verankert die Auswertungshöhe an der
+RANSAC-Deckflächenebene. `dz` fällt damit heraus — **an seine Stelle tritt aber
+der Fit-Fehler δ dieser Ebene, mit demselben Faktor `2·tan(α)`.**
 
-**Aber:** Liegt der Deckflächen-Fit um δ daneben, steht δ an der Stelle von `dz`
-und geht mit demselben Faktor `2·tan(α)` ein. Die Genauigkeit der Spaltbreite
-hinge danach an der **Qualität der Deckflächen-Ebene** — deren Robustheit wird
-damit sicherheitskritisch. Bei realen Scans sitzen dort Spritzer und
-Reflexionen.
+Die Genauigkeit der Spaltbreite hängt jetzt an der **Qualität der
+Deckflächen-Ebene**; deren Robustheit ist damit sicherheitskritisch. Bei
+synthetischen Daten unkritisch (`inlier_ratio` ≥ 0.993, `rms` ≈ 0.013 mm), bei
+realen Scans sitzen dort aber Spritzer und Reflexionen.
 
-Der Gewinn ist trotzdem real: Die Deckfläche ist dicht besetzt und gut
-konditioniert, anders als die `rx`-Rotation, die ICP schlecht auflöst.
+Abgesichert ist das durch:
+- **RANSAC statt Least-Squares** für die Deckfläche — ein LSQ-Fit würde mit den
+  Ausreißern mitwandern
+- **`inlier_ratio` und `rms` als Gütemaße** im Report
+- **ein Gate**: unterschreitet `inlier_ratio` den Schwellwert, wird die
+  Verankerung verweigert und *kein* Spaltwert ausgegeben, statt einen falschen
+  Bezug zu liefern
+- Tests mit künstlichen Spritzern (5 / 15 / 30 % Störanteil), die belegen, dass
+  RANSAC den Fit hält und `inlier_ratio` monoton mit der Störung fällt
 
-**Schranken — die zweite ersetzt die erste, sie ergänzt sie nicht:**
-
-- **jetzt** (z=0-Methode): für die 0.25-mm-Toleranz muss `dz < ~0.12 mm` bleiben.
-  Synthetisch erfüllt (`dz < 0.04 mm`), bei realen Scans offen.
-- **nach dem Fix**: `dz` fällt heraus, das Kriterium wird hinfällig. Maßgeblich
-  ist dann der Fit-Fehler der Deckflächen-Ebene, mit derselben Schranke bei
-  α = 45°; bei flacheren Nähten entsprechend lockerer.
+**Schranke:** Für die 0.25-mm-Toleranz muss δ unter ~0.12 mm bleiben (bei
+α = 45°; bei flacheren Nähten entsprechend lockerer). Das ersetzt die frühere
+Schranke `dz < 0.12 mm` der z=0-Methode — es ergänzt sie nicht.
 
 ### 5.5 Fixture ohne definierte Grundöffnung
 
@@ -273,86 +399,28 @@ Die V-Naht-Fixture in `tests/test_segmentation.py` läuft am Grund auf einen
 Punkt zu (Spaltbreite ≈ 0). `gap_width_by_seam` ist dort deshalb nur auf
 Achsen-Zuordnung geprüft, nicht quantitativ. TODO im Test vermerkt.
 
----
+Für `GapProfile` existiert in `tests/test_gap_profile.py` inzwischen eine eigene
+Fixture **mit** definierter Wurzelöffnung — dort ist der gemessene Spalt gegen
+einen bekannten Wert prüfbar.
 
-### 5.6 Rest-Drift zwischen Läufen — bewusst nicht behoben
+### 5.6 `C_TR_08` liefert 15/20 Bins
 
-Zwei Läufe desselben Datensatzes liefern nicht exakt dieselben Zahlen.
+Der einzige Fall, in dem das NaN-Gate Bins verwirft. Es arbeitet dabei wie
+vorgesehen: statt einen Geradenfit über ein zu dünnes Tiefenband zu legen, wird
+der Bin verworfen.
 
-**Befund.** 14 Fälle zweimal über den echten `run_batch_subtraction.py`-Pfad,
-gleiche Config, gleicher Seed:
+Die Ursache liegt in der **Flanken-Abdeckung**, nicht in der Mindestbesetzung:
+Nachgemessen haben 0 von 20 Bins weniger als 10 Punkte auf einer Flanke.
+Sichtbar wird es im Querschnittsplot — Flanke A bricht bei z ≈ 1.6 ab, während B
+bis z ≈ −1.0 reicht; wo `[d_min, P95]` nicht genug Spreizung hat, greift
+`min_depth_span`.
 
-| | Wert |
-|---|---|
-| identische Fälle | 11 von 14 |
-| max. Abweichung | **0.0040 mm** |
-| Median | 0.0000 mm |
+Die Vermutung, der Zwei-Ebenen-Fit (3.5) würde das entspannen, hat sich **nicht
+bestätigt**: vorher wie nachher 60 von 61 Fällen mit 20/20. Deckflächen- und
+Flankenabdeckung hängen hier nicht zusammen.
 
-Vor Einführung der Seed-Infrastruktur lag der Drift bei 0.013 mm in 14 von 61
-Fällen. Der Seed beseitigt ihn nicht, reduziert ihn aber um etwa Faktor 3.
-
-**Einordnung.**
-
-| Vergleichsgröße | Wert | Verhältnis |
-|---|---|---|
-| Rest-Drift | 0.0040 mm | — |
-| AP2-Toleranz | 0.25 mm | **1.6 %** |
-| akzeptierter P95-Wurzeloffset (5.4) | 0.019 mm | ein Fünftel davon |
-| vom Deckflächen-Fix beseitigter Fehler (4.) | 1.3 mm | Faktor 325 kleiner |
-
-Ohne Einfluss auf eine Ampel-Klassifikation mit ±0.25-mm-Grenzen: Nur ein Fall,
-der auf 0.004 mm genau auf der Schwelle liegt, könnte kippen — und der wäre
-ohnehin ein manuell zu prüfender Grenzfall.
-
-**Kausalkette — nur teilweise aufgeklärt.** Die Quelle ist der
-nichtdeterministische RANSAC in der Segmentierung (`background_remover`,
-`flank_segmenter` über `segment_plane`). Ohne Seed wechselten bis zu 10.979 von
-504.200 Punkten (2.2 %) zwischen zwei Läufen das Label.
-
-Ursprünglich wurde OpenMPs dynamische Threadanpassung als Ursache vermutet: Ein
-Mikrobenchmark zeigte bei identischem Seed 3 verschiedene Ergebnisse aus 30
-Läufen, während ein fixiertes `OMP_NUM_THREADS` (1 oder 2) 90/90 identisch
-lieferte. **Die Gegenprobe widerlegte das als vollständige Erklärung:** im
-realistischen Aufbau — Segmentierung, Registrierung und Messung nacheinander —
-war auch der ungedrosselte Default über 3 Prozesse × 30 Läufe bitgleich.
-
-Damit ist belegt:
-- Registrierung und ICP sind deterministisch (der Messwert blieb bitgleich,
-  während ICP mit voller dynamischer Parallelität lief)
-- der Nichtdeterminismus sitzt allein in der Segmentierung
-- **die genaue Ursache des Rest-Drifts über einen echten Batch bleibt offen.**
-  Kandidaten: Speicherzustand, Thermik, konkurrierende Systemlast über die
-  Batch-Dauer. Nicht weiterverfolgt, siehe Entscheidung.
-
-**Entscheidung: kein Determinismus-Fix.** Nicht weil der Effekt „klein" ist,
-sondern quantifiziert begründet:
-
-- 1.6 % der Toleranz, unterhalb eines bereits bewusst akzeptierten
-  systematischen Offsets
-- ohne Einfluss auf die Zielgröße (Ampel-Klassifikation) und weit unterhalb
-  dessen, was physikalisch die Schweißqualität beeinflusst
-- der Preis wäre eine `ctypes`-Anbindung an die OpenMP-Runtime (plattformabhängig:
-  `vcomp140.dll` unter Windows, `libgomp`/`libiomp5` unter Linux) plus eine
-  maschinenabhängige Threadzahl, die zur Reproduzierbarkeits-Spezifikation
-  gehören würde — verschiedene Threadzahlen liefern verschiedene Werte
-
-Die Seed-Infrastruktur (`core/reproducibility.py`, `random_seed` in der Config,
-`--seed`, effektiver Seed je Modell im Report) **bleibt**: sie reduziert den
-Drift und macht nachvollziehbar, mit welcher RANSAC-Wahl ein Messwert entstanden
-ist.
-
-**Vorbehalt: synthetisch ≠ real.** Diese Zahlen gelten für synthetische Scans mit
-exakten CAD-Normalen. Bei realen Scans mit verrauschten Normalen hat RANSAC mehr
-Spielraum bei der Ebenenwahl — die Streuung kann dort größer ausfallen.
-
-*Nachmess-Plan:* dieselbe Größe einmal an den Heidenbluth-Scans messen, sobald
-verfügbar. Denselben Satz zweimal über den Batch-Pfad, `gap_root_mean_mm`
-vergleichen. Aufwand: Minuten.
-
-**Rückfalloption, falls die reale Streuung stört.** Labels einmal segmentieren,
-visuell prüfen (Cross-Section-Plots aus 5.4), persistieren — `labels.npy` liegt
-ohnehin je Modell vor. Jede nachgelagerte Auswertung läuft dann reproduzierbar
-auf festen Labels, ohne dass die OpenMP-Frage je gelöst werden muss.
+`C_TR_08` ist der Fall mit dem schlechtesten Reg-Residuum (0.693 mm) — dass
+gerade dort die Flankenabdeckung leidet, ist konsistent.
 
 ---
 
@@ -363,11 +431,21 @@ auf festen Labels, ohne dass die OpenMP-Frage je gelöst werden muss.
 | Fälle mit beiden Flanken | 0/61 | **61/61** |
 | Reg-Residuum Median | 2.342 mm | **0.121 mm** |
 | Fälle > 0.25 mm Residuum | 61/61 | **9/61** |
-| Steigung Spaltbreite über `ty` | −1.04 | **+0.964** |
-| max. Fehler `T_Y` | 3.7 mm | **0.078 mm** |
+| Steigung Spaltbreite über `ty` | −1.04 | **+1.000** |
+| Registrierungseinfluss, max über alle 61 | 1.298 mm | **0.008 mm** |
+| Registrierungseinfluss, RMS | 0.415 mm | **0.002 mm** |
+| innerhalb 0.25-mm-Toleranz | 63.9 % | **100 %** |
+| Deckfläche über Sicherheitsnetz (`R_Y_+1.0°`) | 42.5 % | **0 %** |
+| `inlier_ratio` Referenzebene, Minimum | 0.992 | **1.000** |
 
-Fehlerbudget der verbleibenden 3.6 %: vollständig durch den
-Verstärkungsmechanismus aus Abschnitt 4 erklärt, nicht durch die Messmethode.
+Der verbleibende systematische Offset ist der P95-Schnitt bei `d_root`:
+**−0.019 mm**, konstant und ohne Streuung über die `T_Y`-Serie. Er ist über
+`flank_depth_max_quantile` justierbar; P95 wurde beibehalten, weil das echte
+Maximum ausreißerempfindlich wäre.
+
+Die vier großen Fehlerquellen — Achsen-Konvention, `coarse_pca`,
+Unterseiten-Kontamination und die z=0-Auswertungshöhe — sind behoben. Was
+bleibt, steht in Abschnitt 5 und liegt durchweg unterhalb der Toleranz.
 
 ---
 
@@ -382,7 +460,20 @@ uv run python scripts/run_batch_subtraction.py \
 
 Der erste Schritt braucht den CAD-API-Host
 (`https://cimtt-ki.haw-kiel.de/cad-preprocessing-api/converter`) und legt den
-rohen Cache unter `data/outputs/cad/<stem>/` an.
+rohen Cache unter `data/outputs/cad/<stem>/` an. Der Generator liest **diesen**
+Cache, nicht die vorverarbeitete Wolke unter `data/outputs/<stem>/` (siehe 3.3);
+`load_cad()` bricht bei Verwechslung mit einer Meldung ab.
 
 Auswertung: `notebooks/synthetic_validation.ipynb`,
 Rohdaten `data/outputs/batch_summary.csv`.
+
+**Reproduzierbarkeit.** Zwei Läufe mit gleichem `random_seed` liefern identische
+Werte (siehe 3.5). Der effektive Seed steht je Modell in
+`subtraction_report.json`; über `--seed` lässt er sich überschreiben, etwa um die
+Streuung gegen die RANSAC-Wahl zu quantifizieren.
+
+**Visuelle Kontrolle.** `plot_cross_section(model, x_min, x_max)` zeichnet die im
+Report gespeicherten Fits — Referenzebene, beide Flankengeraden über ihrem
+tatsächlichen Tiefenband, Fitband-Obergrenze und Wurzeltiefe. Bewusst keine neu
+gerechneten: ein zweiter Fit im Plot würde Abweichungen zwischen Bild und
+Messwert verstecken.

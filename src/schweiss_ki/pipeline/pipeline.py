@@ -328,12 +328,17 @@ class Pipeline:
             Liste von WeldVolumeModels
         """
         input_dir = Path(input_dir or self.config.input_dir)
-        step_files = (
-            sorted(input_dir.glob("*.step")) +
-            sorted(input_dir.glob("*.STEP")) +
-            sorted(input_dir.glob("*.stp")) +
-            sorted(input_dir.glob("*.STP"))
-        )
+        # Dedupliziert über den aufgelösten Pfad: auf case-insensitiven
+        # Dateisystemen (Windows, macOS) matchen "*.step" und "*.STEP"
+        # dieselbe Datei, die sonst doppelt verarbeitet würde.
+        seen: set = set()
+        step_files = []
+        for pattern in ("*.step", "*.STEP", "*.stp", "*.STP"):
+            for path in sorted(input_dir.glob(pattern)):
+                key = path.resolve()
+                if key not in seen:
+                    seen.add(key)
+                    step_files.append(path)
 
         if not step_files:
             logger.warning(f"Keine STEP-Dateien gefunden in: {input_dir}")

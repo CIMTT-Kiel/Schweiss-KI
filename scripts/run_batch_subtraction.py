@@ -54,6 +54,14 @@ def main():
         help="Glob-Patterns für Scan-Suche.",
     )
     parser.add_argument(
+        "--source-type",
+        choices=["real", "synthetic"],
+        default="real",
+        help="Steuert die Preprocessing-Overrides aus der pipeline.yaml. "
+             "'synthetic' schaltet das Preprocessing ab – synthetische Scans "
+             "sind rauschfrei und bringen exakte CAD-Normalen mit.",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true",
         help="Debug-Level-Logging.",
     )
@@ -87,7 +95,7 @@ def main():
     models = pipeline.process_scan_directory_against_cad(
         scan_dir=args.scan_dir,
         cad_step_file=args.cad,
-        source_type="real",
+        source_type=args.source_type,
         glob_patterns=tuple(args.patterns),
     )
 

@@ -66,9 +66,29 @@ preprocessing:
         voxel_size: 0.3
 
     synthetic:
-      # Synthetisches Rauschen ist kontrolliert – weniger aggressives Filtering
+      # Synthetische Scans sind direkte Abtastungen der CAD-Oberfläche:
+      # kein Rauschen, keine Ausreißer, Normalen bereits aus der Konvertierung.
+      # Preprocessing kostet hier nur Genauigkeit und wird komplett abgeschaltet.
+      #
+      # Gemessen an der T_Y-Serie (Soll-Steigung Spaltbreite über ty = 1.0):
+      #   rohe Scans                      : 1.0000
+      #   mit voxel_grid_downsampler 0.5  : 0.9757   (-2.4 %)
+      # Ursache: die Breitenmessung nutzt Randstatistiken (a.max(), b.min()).
+      # Voxel-Downsampling ersetzt Punkte durch Voxel-Schwerpunkte und zieht
+      # den äußersten Flankenrand nach innen – der Spalt wird systematisch
+      # zu klein gemessen, skalierend mit der Voxelgröße statt mit dem Spalt.
+      #
+      # normal_estimator zusätzlich aus: er überschreibt die exakten CAD-
+      # Normalen mit geschätzten und dreht sie per orient_mode=camera nach
+      # oben (siehe load_cad() in scripts/generate_synthetic_dataset.py).
       statistical_outlier_filter:
-        std_ratio: 3.0
+        enabled: false
+      radius_outlier_filter:
+        enabled: false
+      voxel_grid_downsampler:
+        enabled: false
+      normal_estimator:
+        enabled: false
 
     real:
       # Reale Scandaten: alle Filter aktiv

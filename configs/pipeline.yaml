@@ -174,7 +174,8 @@ segmentation:
 # Status: aktiv (Phase 5)
 #
 # Ablauf:
-#   1. Registrierung: Scan in CAD-Koordinatensystem überführen (CoarsePCA → ICPFine)
+#   1. Registrierung: Scan in CAD-Koordinatensystem überführen (XEdgeAlign → ICPFine;
+#      CoarsePCA deaktiviert, Begründung am Step selbst)
 #   2. Deviation: Geometrische Abweichungen quantifizieren (GapProfile, ...)
 #
 # Reihenfolge der Schlüssel innerhalb von 'steps:' = Ausführungsreihenfolge.
@@ -189,8 +190,22 @@ subtraction:
       # 1. Grob-Registrierung via PCA
       #    Richtet Hauptachsen aufeinander aus, löst Vorzeichen-Ambiguität
       #    über vier Kandidaten-Auswertungen. Liefert Init für ICP.
+      #
+      #    DEAKTIVIERT für vorausgerichtete Daten.
+      #    Messung auf den 61 synthetischen Fällen (Naht ‖ X, Blech 199×98×5mm):
+      #      mit coarse_pca : Δz = +2.502 mm, ICP-fitness 0.30, Spalt invertiert
+      #      ohne coarse_pca: Δz = +0.011 mm, Spaltbreiten auf ±0.06 mm korrekt
+      #    Ursache: bei einer flachen Platte ist die dritte Hauptkomponente
+      #    (Z, nur 5mm gegen 199/98mm) numerisch schlecht konditioniert – die
+      #    Kandidaten-Auswahl greift daneben und verschiebt um ~halbe Blechdicke.
+      #    ICP startet dann aus falscher Lage und findet nur ein lokales Minimum.
+      #
+      #    Synthetische Fälle und eingemessene CMM-Scans liegen bereits im
+      #    CAD-Frame – es gibt nichts grob zu registrieren. Für Scans in
+      #    beliebiger Lage muss coarse_pca erst repariert werden (schlecht
+      #    konditionierte Achse gesondert behandeln), nicht nur zugeschaltet.
       coarse_pca:
-        enabled: true
+        enabled: false
         anchor_labels: [0, 1, 2]      # Background + Flanken, ohne Spalt
         evaluation_samples: 5000      # Source-Subsample für Kandidaten-Ranking
         random_seed: 0

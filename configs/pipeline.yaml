@@ -12,7 +12,9 @@
 # =============================================================================
 
 # Eingabeverzeichnis mit STEP-Dateien
-input_dir: data/synthetic/test_step_files
+# Muss zum Code-Default (PipelineConfig.input_dir) und zu den --cad-Defaults
+# der Skripte in scripts/ passen.
+input_dir: data/raw/step_files
 
 # Output-Konfiguration
 output:

@@ -44,6 +44,13 @@ LABEL_COLORS = {
     4: "#9C27B0",   # lila
 }
 
+# Annotationsebene des Querschnitts – bewusst KEINE neuen kategorialen Farben.
+# Referenzebene, Fitband-Grenzen und Wurzeltiefe sind Bezugsgrößen, keine
+# Datenreihen; sie tragen neutrale Ink-Tokens, damit die Label-Farben
+# eindeutig den Flanken zugeordnet bleiben.
+COLOR_REFERENCE = "#37474F"   # dunkelgrau – Referenzebene (der Anker)
+COLOR_GUIDE = "#B0BEC5"       # hellgrau – Fitband-Grenzen, Hilfslinien
+
 
 # ── Spaltprofil ────────────────────────────────────────────────────────
 
@@ -173,23 +180,63 @@ def plot_segmentation_overview(
 
 # ── Querschnitt für Diagnose ───────────────────────────────────────────
 
+def _plane_z_at(plane: dict, seam_val: float, gap_vals: np.ndarray,
+                seam_axis: int, gap_axis: int, vertical_axis: int,
+                depth: float = 0.0) -> np.ndarray:
+    """Z-Höhe einer Ebene an gegebenen gap-Positionen, optional in Tiefe `depth`.
+
+    Löst n·p + d = -depth nach der Vertikalkomponente auf. `depth` wird
+    senkrecht zur Ebene gemessen (so wie GapProfile es definiert), nicht
+    vertikal – bei geneigter Ebene ist das ein Unterschied.
+    """
+    n = np.asarray(plane["normal"], dtype=float)
+    gap_vals = np.atleast_1d(np.asarray(gap_vals, dtype=float))
+    fixed = n[seam_axis] * seam_val + n[gap_axis] * gap_vals + float(plane["d"])
+    return (-fixed - depth) / n[vertical_axis]
+
+
+def _bins_in_window(profile: dict, x_min: float, x_max: float) -> np.ndarray:
+    """Indizes der Naht-Bins, deren Zentrum im Querschnittsfenster liegt."""
+    centers = np.asarray(profile.get("seam_axis_centers", []), dtype=float)
+    if centers.size == 0:
+        return np.empty(0, dtype=int)
+    return np.where((centers >= x_min) & (centers < x_max))[0]
+
+
 def plot_cross_section(
     model: "WeldVolumeModel",
     x_min: float,
     x_max: float,
-    show_extrapolation: bool = True,
+    show_anchored: bool = True,
+    show_extrapolation: bool = False,
     labels_to_show: Sequence[int] = (1, 2, 3, 4),
-    figsize: tuple = (8, 6),
+    figsize: tuple = (9, 6.5),
 ) -> plt.Figure:
     """Querschnitt YZ für einen X-Bereich entlang der Naht.
 
-    Zeigt die Punkte aller relevanten Labels mit ihrer Z-Höhe gegen die
-    Y-Position. Wenn show_extrapolation=True: zeichnet die linearen Fits
-    durch Flanke A und B ein, plus deren Schnittpunkt mit z=0 (der
-    virtuelle Wurzelpunkt, der für die Spaltbreitenmessung verwendet wird).
+    Visuelle Kontrolle der verankerten Spaltmessung. Gezeichnet werden die
+    im DeviationReport GESPEICHERTEN Fits – nicht neu gerechnete. Ein
+    zweiter Fit an dieser Stelle würde Abweichungen zwischen Bild und
+    Messwert verstecken.
 
-    Diagnostisches Werkzeug: Gratbildung, Wurzeldurchhang, ungewöhnliche
-    Punktverteilungen sind hier sofort sichtbar.
+    Elemente (show_anchored=True):
+        - Rohpunkte je Label, im Hintergrund
+        - Referenzebene bei d = 0, mit inlier_ratio und rms in der Legende:
+          der Anker, an dem die gesamte Messung hängt
+        - die zwei Flankengeraden, gezeichnet NUR über ihr tatsächliches
+          Fitband – die Bandgrenzen sind damit direkt ablesbar
+        - Fitband-Grenzen (d_min bzw. P95-Schnitt) als Hilfslinien
+        - Wurzeltiefe d_root: dort sitzt der bekannte systematische Offset
+          von ~0.019 mm. Wer den Wert im Bild sieht, kann bei realen Scans
+          beurteilen, ob P95 dort sinnvoll liegt oder die Flankenabdeckung
+          ein anderes Quantil verlangt.
+
+    show_extrapolation blendet zusätzlich die alte z=0-Methode ein
+    (Default aus), solange beide Verfahren parallel laufen.
+
+    Diagnostisches Werkzeug: Gratbildung, Wurzeldurchhang, Heftnähte und
+    ungewöhnliche Punktverteilungen sind hier sofort sichtbar – ein r² < 1
+    an einer Flanke lässt sich gegen die Rohpunkte prüfen.
     """
     pts = np.asarray(model.point_cloud.points)
     if model.labels is None:
@@ -206,13 +253,101 @@ def plot_cross_section(
         lmask = mask & (model.labels == label_id)
         if not lmask.any():
             continue
+        # Rohpunkte bewusst zurückgenommen und im Hintergrund: sie sind die
+        # Prüfgrundlage für die Fits, nicht die Aussage des Plots.
         ax.scatter(
             pts[lmask, 1], pts[lmask, 2],
-            c=LABEL_COLORS[label_id], s=15, alpha=0.7,
+            c=LABEL_COLORS[label_id], s=8, alpha=0.35, linewidths=0, zorder=2,
             label=f"{LABEL_NAMES[label_id]} ({int(lmask.sum())})",
         )
 
-    # Extrapolations-Linien für Flanke A und B
+    # ── Verankerte Auswertung: gespeicherte Fits zeichnen ─────────────
+    # Bewusst NICHT lokal neu fitten – der Plot soll zeigen, was GapProfile
+    # tatsächlich gerechnet hat. Ein zweiter Fit hier würde Abweichungen
+    # zwischen Plot und Messwert verstecken, also genau das kaschieren, wofür
+    # die visuelle Kontrolle da ist.
+    profile = None
+    if model.subtraction_report is not None:
+        profile = getattr(model.subtraction_report.deviation, "gap_profile", None)
+
+    drawn_anchored = False
+    if show_anchored and profile and profile.get("anchored"):
+        s_ax = int(profile.get("seam_axis", 0))
+        g_ax = int(profile.get("gap_axis", 1))
+        v_ax = int(profile.get("vertical_axis", 2))
+        ref = profile.get("reference_plane")
+        bins = _bins_in_window(profile, x_min, x_max)
+        seam_c = 0.5 * (x_min + x_max)
+        y_span = np.linspace(pts[mask, g_ax].min(), pts[mask, g_ax].max(), 2)
+
+        if ref is not None:
+            # Referenzebene bei d = 0 – der Anker, an dem alles hängt.
+            z_ref = _plane_z_at(ref, seam_c, y_span, s_ax, g_ax, v_ax, depth=0.0)
+            ax.plot(
+                y_span, z_ref, "-", color=COLOR_REFERENCE, linewidth=2.0, zorder=6,
+                label=(f"Referenzebene d=0 (inlier {ref['inlier_ratio']:.3f}, "
+                       f"rms {ref['rms_mm']:.3f} mm)"),
+            )
+
+        for label_id, key in ((1, "flank_a_profile"), (2, "flank_b_profile")):
+            prof = profile.get(key)
+            if prof is None or len(bins) == 0:
+                continue
+            q0 = np.asarray(prof["q0"], dtype=float)
+            sl = np.asarray(prof["slope"], dtype=float)
+            d_lo = np.asarray(prof["d_lo"], dtype=float)
+            d_hi = np.asarray(prof["d_hi"], dtype=float)
+            r2 = np.asarray(prof["r2"], dtype=float)
+            for bi in bins:
+                if not np.isfinite(q0[bi]):
+                    continue
+                # Nur über das tatsächlich gefittete Tiefenband zeichnen –
+                # so ist im Bild ablesbar, wo gefittet wurde und wo nicht.
+                dd = np.linspace(d_lo[bi], d_hi[bi], 40)
+                qq = q0[bi] + sl[bi] * dd
+                zz = np.array([
+                    _plane_z_at(ref, seam_c, q, s_ax, g_ax, v_ax, depth=d)[0]
+                    for q, d in zip(qq, dd)
+                ])
+                first = bi == bins[0]
+                ax.plot(
+                    qq, zz, "-", color=LABEL_COLORS[label_id], linewidth=2.0, zorder=8,
+                    label=(f"{LABEL_NAMES[label_id]} Fit "
+                           f"(α={np.degrees(np.arctan(abs(sl[bi]))):.2f}°, "
+                           f"r²={r2[bi]:.4f})") if first else None,
+                )
+            drawn_anchored = True
+
+        # Obere Fitband-Grenze als Hilfslinie – das ist ein globaler
+        # Parameter (flank_depth_min) und gilt fuer beide Flanken.
+        #
+        # Die UNTERE Grenze wird bewusst NICHT als gemeinsame Linie gezogen:
+        # sie ist je Flanke verschieden (P95 der jeweiligen Abdeckung), und
+        # ein Aggregat waere bei asymmetrischer Abdeckung irrefuehrend. Wo
+        # jede Flanke endet, zeigt ihr eigenes Linienende bereits exakt.
+        if ref is not None and len(bins):
+            d_lo_all = [np.asarray(profile[k]["d_lo"], dtype=float)[bins]
+                        for k in ("flank_a_profile", "flank_b_profile")]
+            band_lo = np.nanmin(np.concatenate(d_lo_all)) if len(d_lo_all) else np.nan
+            if np.isfinite(band_lo):
+                ax.plot(
+                    y_span, _plane_z_at(ref, seam_c, y_span, s_ax, g_ax, v_ax, depth=band_lo),
+                    ":", color=COLOR_GUIDE, linewidth=1.2, zorder=4,
+                    label=f"Fitband-Obergrenze (d={band_lo:.2f} mm)",
+                )
+            d_root = np.asarray(profile.get("d_root", []), dtype=float)
+            if d_root.size and np.isfinite(d_root[bins]).any():
+                dr = float(np.nanmean(d_root[bins]))
+                gr = np.asarray(profile.get("gap_root_widths", []), dtype=float)
+                gr_txt = (f", Spalt {np.nanmean(gr[bins]):.3f} mm"
+                          if gr.size and np.isfinite(gr[bins]).any() else "")
+                ax.plot(
+                    y_span, _plane_z_at(ref, seam_c, y_span, s_ax, g_ax, v_ax, depth=dr),
+                    "--", color=COLOR_REFERENCE, linewidth=1.5, alpha=0.8, zorder=5,
+                    label=f"Wurzeltiefe d_root={dr:.3f} mm{gr_txt}",
+                )
+
+    # ── Legacy: lokale Extrapolation auf z = 0 ────────────────────────
     if show_extrapolation:
         for label_id in (1, 2):
             lmask = mask & (model.labels == label_id)
@@ -226,19 +361,47 @@ def plot_cross_section(
             y_line = slope * z_line + y0
             ax.plot(
                 y_line, z_line, "--",
-                color=LABEL_COLORS[label_id], alpha=0.6, linewidth=1.5,
-                label=f"{LABEL_NAMES[label_id]} extrapoliert (y₀={y0:+.3f})",
+                color=LABEL_COLORS[label_id], alpha=0.35, linewidth=1.2, zorder=3,
+                label=f"{LABEL_NAMES[label_id]} z=0-Extrapolation (y₀={y0:+.3f})",
             )
-            # Marker am Wurzelpunkt
-            ax.scatter([y0], [0], color=LABEL_COLORS[label_id], marker="x", s=80, zorder=10)
+            ax.scatter([y0], [0], color=LABEL_COLORS[label_id], marker="x",
+                       s=80, alpha=0.5, zorder=7)
+        ax.axhline(0, color=COLOR_GUIDE, linestyle=":", alpha=0.6,
+                   label="z = 0 (alte Bezugsebene)")
 
-    ax.axhline(0, color="gray", linestyle=":", alpha=0.6, label="z = 0 (Wurzelebene)")
-    ax.set_xlabel("Y (mm)")
-    ax.set_ylabel("Z (mm)")
-    ax.set_aspect("equal")
+    if show_anchored and not drawn_anchored:
+        logger.debug(
+            "  plot_cross_section: keine verankerte Auswertung im Fenster "
+            "(kein gap_profile, nicht verankert, oder kein Bin-Zentrum in "
+            f"[{x_min}, {x_max}])"
+        )
+    # ── Ausschnitt auf die Naht begrenzen ─────────────────────────────
+    # Die Deckflächen reichen über die volle Blechbreite (±50 mm), die Naht
+    # ist nur wenige mm breit. Ohne Zoom quetscht aspect="equal" den
+    # interessanten Bereich zu einem Splitter zusammen. Gezoomt wird auf die
+    # Flanken, damit Flankenwinkel und Spalt ablesbar bleiben.
+    flank_mask = mask & np.isin(model.labels, (1, 2))
+    if flank_mask.any():
+        f_lo, f_hi = pts[flank_mask, 1].min(), pts[flank_mask, 1].max()
+        pad = max(0.25 * (f_hi - f_lo), 1.0)
+        ax.set_xlim(f_lo - pad, f_hi + pad)
+        z_lo, z_hi = pts[flank_mask, 2].min(), pts[flank_mask, 2].max()
+        z_pad = max(0.15 * (z_hi - z_lo), 0.5)
+        ax.set_ylim(z_lo - z_pad, z_hi + z_pad)
+
+    ax.set_xlabel("Y – Spalt-Querrichtung (mm)")
+    ax.set_ylabel("Z – Tiefe (mm)")
+    ax.set_aspect("equal")   # Flankenwinkel sollen unverzerrt ablesbar sein
     ax.set_title(f"Querschnitt X ∈ [{x_min:+.1f}, {x_max:+.1f}] – {model.model_id}")
-    ax.legend(loc="upper right", framealpha=0.95, fontsize=9)
-    ax.grid(alpha=0.3)
+    # Legende neben die Achse: sie ist mit Fit-Kennwerten lang und würde
+    # innerhalb der Achse die Naht verdecken.
+    ax.legend(
+        loc="upper left", bbox_to_anchor=(1.02, 1.0),
+        framealpha=0.95, fontsize=8, borderaxespad=0.0,
+    )
+    ax.grid(alpha=0.25, linewidth=0.6)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
     fig.tight_layout()
     return fig
 

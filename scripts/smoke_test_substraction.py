@@ -62,7 +62,9 @@ def main():
     if not args.config.exists():
         print(f"❌ Config nicht gefunden: {args.config}")
         return 1
-    cfg = PipelineConfig.from_dict(yaml.safe_load(args.config.read_text()))
+    cfg = PipelineConfig.from_dict(
+        yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    )
 
     # Sanity-Checks
     if not args.scan.exists():

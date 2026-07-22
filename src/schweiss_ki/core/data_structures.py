@@ -157,14 +157,14 @@ class WeldVolumeModel:
         # nicht durch große Distanz-/Transform-Strukturen aufgebläht wird.
         if self.subtraction_report is not None:
             subtraction_file = model_dir / "subtraction_report.json"
-            with open(subtraction_file, "w") as f:
+            with open(subtraction_file, "w", encoding="utf-8") as f:
                 json.dump(
                     self.subtraction_report.to_dict(),
                     f, indent=2, default=str,
                 )
             metadata_dict["subtraction_file"] = "subtraction_report.json"
 
-        with open(meta_file, "w") as f:
+        with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(metadata_dict, f, indent=2)
 
         return model_dir
@@ -177,7 +177,7 @@ class WeldVolumeModel:
         model_dir = Path(model_dir)
 
         meta_file = model_dir / "metadata.json"
-        with open(meta_file, "r") as f:
+        with open(meta_file, "r", encoding="utf-8") as f:
             meta = json.load(f)
 
         pc_file = model_dir / "pointcloud.ply"
@@ -206,7 +206,7 @@ class WeldVolumeModel:
             subtraction_file = model_dir / meta["subtraction_file"]
             if subtraction_file.exists():
                 from ..subtraction.reports import SubtractionReport
-                with open(subtraction_file, "r") as f:
+                with open(subtraction_file, "r", encoding="utf-8") as f:
                     sub_data = json.load(f)
                 subtraction_report = SubtractionReport(
                     cad_source_file=sub_data.get("cad_source_file"),

@@ -158,7 +158,7 @@ class RegistrationPipeline:
         garantiert Insertion-Order in dicts; PyYAML respektiert das).
         """
         config_path = Path(config_path)
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
 
         steps_cfg = (

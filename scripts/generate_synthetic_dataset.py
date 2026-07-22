@@ -212,18 +212,54 @@ def build_transformation(
 # ── Hauptlogik ──────────────────────────────────────────────────────────
 
 def load_cad(cad_cache_dir: Path) -> o3d.geometry.PointCloud:
-    """Lädt die CAD-Punktwolke aus dem Konvertierungs-Cache."""
+    """Lädt die CAD-Punktwolke aus dem Konvertierungs-Cache.
+
+    WICHTIG – es muss die ROHE API-Wolke sein (data/outputs/cad/<stem>/),
+    nicht die vorverarbeitete aus data/outputs/<stem>/:
+
+    Das Preprocessing schätzt die Normalen mit `orient_mode: camera` neu und
+    dreht dabei ALLE Normalen zur Kamera über dem Werkstück – die Unterseite
+    bekommt n_z = +1 statt -1. filter_top_surface() unten kann die Unterseite
+    dann nicht mehr aussortieren; sie landet im synthetischen Scan, obwohl ein
+    CMM-Scan von oben sie nie sieht.
+
+        rohe Wolke          : 483.494 Punkte mit n_z < -0.5 (Unterseite)
+        nach Preprocessing  :     563 Punkte mit n_z < -0.5
+
+    Konkret gemessen: mit der vorverarbeiteten Wolke bestanden 49.6 % der
+    erzeugten Scan-Punkte aus Unterseite. Die Registrierung findet für sie
+    keine Korrespondenz im CAD-Top-Target – Residuum ~2.34 mm statt ~0.10 mm
+    und ICP-fitness 0.30.
+    """
     ply_path = cad_cache_dir / "pointcloud.ply"
     if not ply_path.exists():
         raise FileNotFoundError(
             f"CAD-Cache-PLY nicht gefunden: {ply_path}\n"
-            "Erst run_batch_subtraction.py laufen lassen, damit CAD konvertiert ist."
+            "Erst 'run_pipeline.py --batch' laufen lassen, damit das CAD "
+            "konvertiert ist. Das schreibt nach {output.output_dir}/{STEP-Stem}/ "
+            "(siehe configs/pipeline.yaml)."
         )
     pcd = o3d.io.read_point_cloud(str(ply_path))
     if not pcd.has_normals():
         raise ValueError(
             f"CAD-Punktwolke {ply_path} hat keine Normalen – "
             "Cache scheint korrupt."
+        )
+
+    # Schutz gegen die oben beschriebene Verwechslung: eine rohe CAD-Wolke
+    # eines Volumenkörpers hat immer einen substanziellen Anteil nach unten
+    # zeigender Normalen. Fehlt der, wurden die Normalen umorientiert.
+    normals = np.asarray(pcd.normals)
+    down_share = float((normals[:, 2] < -0.5).mean())
+    if down_share < 0.05:
+        raise ValueError(
+            f"CAD-Wolke {ply_path} hat nur {down_share:.1%} nach unten zeigende "
+            f"Normalen (erwartet >5 % für einen Volumenkörper).\n"
+            "Das deutet auf eine VORVERARBEITETE Wolke hin, deren Normalen per "
+            "orient_mode=camera nach oben gedreht wurden. Damit landet die "
+            "Blech-Unterseite im synthetischen Scan.\n"
+            "Bitte den rohen Konvertierungs-Cache verwenden: "
+            "data/outputs/cad/<STEP-Stem>/ (angelegt von run_batch_subtraction.py)."
         )
     return pcd
 
@@ -234,6 +270,16 @@ def filter_top_surface(pcd: o3d.geometry.PointCloud, nz_threshold: float = 0.5):
     Simuliert die Sichtbarkeit eines CMM-Scans von oben – nur Punkte,
     deren Oberflächen-Normale hauptsächlich nach oben zeigt (n_z > 0.5),
     werden übernommen.
+
+    TODO: nz_threshold=0.5 ist für flachere V-Nähte zu streng. Eine Flanke
+    mit Winkel α zur Vertikalen hat n_z = sin(α):
+        90° V-Naht (α=45°) → n_z = 0.707  → passiert den Filter
+        60° V-Naht (α=30°) → n_z = 0.500  → liegt exakt auf der Schwelle,
+                                            die Flanken würden komplett
+                                            herausgefiltert.
+    Vor dem Erzeugen von 60°-Datensätzen den Schwellwert an den Flanken-
+    winkel koppeln (z.B. nz_threshold = 0.5 * sin(α)). Bewusst noch nicht
+    geändert, um die bestehenden 61 Fälle nicht zu invalidieren.
     """
     normals = np.asarray(pcd.normals)
     mask = normals[:, 2] > nz_threshold
@@ -313,7 +359,9 @@ def main():
         "--cad-cache-dir",
         type=Path,
         default=Path("data/outputs/cad/Baugruppe_Beispielteil_V-Naht_1.5mm_Spalt"),
-        help="Verzeichnis mit dem konvertierten CAD (pointcloud.ply darin).",
+        help="CAD-Konvertierungs-Cache (pointcloud.ply darin). MUSS die ROHE "
+             "API-Wolke sein, nicht die vorverarbeitete – siehe load_cad(). "
+             "Wird von run_batch_subtraction.py angelegt.",
     )
     parser.add_argument(
         "--output-dir",

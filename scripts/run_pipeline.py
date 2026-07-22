@@ -47,7 +47,7 @@ def setup_logging(verbose: bool = False):
 
 def load_config(config_path: Path, overrides: dict) -> PipelineConfig:
     """Lädt YAML-Config und wendet CLI-Overrides an"""
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     # CLI-Overrides einarbeiten

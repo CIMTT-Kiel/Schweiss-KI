@@ -12,7 +12,9 @@
 # =============================================================================
 
 # Eingabeverzeichnis mit STEP-Dateien
-input_dir: data/synthetic/test_step_files
+# Muss zum Code-Default (PipelineConfig.input_dir) und zu den --cad-Defaults
+# der Skripte in scripts/ passen.
+input_dir: data/raw/step_files
 
 # Output-Konfiguration
 output:
@@ -64,9 +66,29 @@ preprocessing:
         voxel_size: 0.3
 
     synthetic:
-      # Synthetisches Rauschen ist kontrolliert – weniger aggressives Filtering
+      # Synthetische Scans sind direkte Abtastungen der CAD-Oberfläche:
+      # kein Rauschen, keine Ausreißer, Normalen bereits aus der Konvertierung.
+      # Preprocessing kostet hier nur Genauigkeit und wird komplett abgeschaltet.
+      #
+      # Gemessen an der T_Y-Serie (Soll-Steigung Spaltbreite über ty = 1.0):
+      #   rohe Scans                      : 1.0000
+      #   mit voxel_grid_downsampler 0.5  : 0.9757   (-2.4 %)
+      # Ursache: die Breitenmessung nutzt Randstatistiken (a.max(), b.min()).
+      # Voxel-Downsampling ersetzt Punkte durch Voxel-Schwerpunkte und zieht
+      # den äußersten Flankenrand nach innen – der Spalt wird systematisch
+      # zu klein gemessen, skalierend mit der Voxelgröße statt mit dem Spalt.
+      #
+      # normal_estimator zusätzlich aus: er überschreibt die exakten CAD-
+      # Normalen mit geschätzten und dreht sie per orient_mode=camera nach
+      # oben (siehe load_cad() in scripts/generate_synthetic_dataset.py).
       statistical_outlier_filter:
-        std_ratio: 3.0
+        enabled: false
+      radius_outlier_filter:
+        enabled: false
+      voxel_grid_downsampler:
+        enabled: false
+      normal_estimator:
+        enabled: false
 
     real:
       # Reale Scandaten: alle Filter aktiv
@@ -120,10 +142,17 @@ preprocessing:
 #
 # Labels:
 #   0 = background          (Werkstück-Oberseite, Umgebung, Artefakte außerhalb Naht)
-#   1 = flank_a             (Linke V-Fase, Normale n_x > 0)
-#   2 = flank_b             (Rechte V-Fase, Normale n_x < 0)
+#   1 = flank_a             (V-Fase auf negativer gap_axis-Seite, n[gap_axis] > 0)
+#   2 = flank_b             (V-Fase auf positiver gap_axis-Seite, n[gap_axis] < 0)
 #   3 = gap_region          (Freier Raum zwischen den Fasen)
 #   4 = sub_gap_artifacts   (Punkte unterhalb Flanken-Unterkante, z.B. Durchstich)
+#
+# Achsen-Konvention (identisch zur Subtraktions-Stage weiter unten):
+#   seam_axis     = 0 (X) – Naht-Längsrichtung
+#   gap_axis      = 1 (Y) – Spalt-Querrichtung
+#   vertical_axis = 2 (Z) – Tiefe
+# Muss zur tatsächlichen Lage der Naht passen, sonst findet der
+# flank_segmenter 0 Kandidaten (Symptom: alles wird Label 0).
 # -----------------------------------------------------------------------------
 segmentation:
   enabled: true
@@ -146,14 +175,20 @@ segmentation:
       ransac_n: 3
       expected_flank_angle_deg: 45.0  # Flanke zur Vertikalen (90° V-Naht)
       normal_cos_threshold: 0.85      # lenient: ±32° Abweichung zugelassen
+      seam_axis: 0                    # 0=X – Naht-Längsrichtung
+      gap_axis: 1                     # 1=Y – Flanken-Normalen zeigen entlang ±Y
+      vertical_axis: 2                # 2=Z – Tiefe
 
     # 3. Rest zwischen Flanken als Gap / Sub-Gap-Artefakte klassifizieren
     gap_classifier:
       enabled: true
       z_lower_quantile: 0.05
-      x_margin: 0.5
+      gap_margin: 0.5
       separate_sub_gap_artifacts: true
-      gap_width_y_bins: 20
+      gap_width_bins: 20
+      seam_axis: 0
+      gap_axis: 1
+      vertical_axis: 2
 
 
 # ── Stage 4: Subtraktion (AP2.2) ─────────────────────────────────────────────
@@ -161,7 +196,8 @@ segmentation:
 # Status: aktiv (Phase 5)
 #
 # Ablauf:
-#   1. Registrierung: Scan in CAD-Koordinatensystem überführen (CoarsePCA → ICPFine)
+#   1. Registrierung: Scan in CAD-Koordinatensystem überführen (XEdgeAlign → ICPFine;
+#      CoarsePCA deaktiviert, Begründung am Step selbst)
 #   2. Deviation: Geometrische Abweichungen quantifizieren (GapProfile, ...)
 #
 # Reihenfolge der Schlüssel innerhalb von 'steps:' = Ausführungsreihenfolge.
@@ -176,8 +212,22 @@ subtraction:
       # 1. Grob-Registrierung via PCA
       #    Richtet Hauptachsen aufeinander aus, löst Vorzeichen-Ambiguität
       #    über vier Kandidaten-Auswertungen. Liefert Init für ICP.
+      #
+      #    DEAKTIVIERT für vorausgerichtete Daten.
+      #    Messung auf den 61 synthetischen Fällen (Naht ‖ X, Blech 199×98×5mm):
+      #      mit coarse_pca : Δz = +2.502 mm, ICP-fitness 0.30, Spalt invertiert
+      #      ohne coarse_pca: Δz = +0.011 mm, Spaltbreiten auf ±0.06 mm korrekt
+      #    Ursache: bei einer flachen Platte ist die dritte Hauptkomponente
+      #    (Z, nur 5mm gegen 199/98mm) numerisch schlecht konditioniert – die
+      #    Kandidaten-Auswahl greift daneben und verschiebt um ~halbe Blechdicke.
+      #    ICP startet dann aus falscher Lage und findet nur ein lokales Minimum.
+      #
+      #    Synthetische Fälle und eingemessene CMM-Scans liegen bereits im
+      #    CAD-Frame – es gibt nichts grob zu registrieren. Für Scans in
+      #    beliebiger Lage muss coarse_pca erst repariert werden (schlecht
+      #    konditionierte Achse gesondert behandeln), nicht nur zugeschaltet.
       coarse_pca:
-        enabled: true
+        enabled: false
         anchor_labels: [0, 1, 2]      # Background + Flanken, ohne Spalt
         evaluation_samples: 5000      # Source-Subsample für Kandidaten-Ranking
         random_seed: 0

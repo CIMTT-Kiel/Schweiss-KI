@@ -54,6 +54,14 @@ def main():
         help="Glob-Patterns für Scan-Suche.",
     )
     parser.add_argument(
+        "--source-type",
+        choices=["real", "synthetic"],
+        default="real",
+        help="Steuert die Preprocessing-Overrides aus der pipeline.yaml. "
+             "'synthetic' schaltet das Preprocessing ab – synthetische Scans "
+             "sind rauschfrei und bringen exakte CAD-Normalen mit.",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true",
         help="Debug-Level-Logging.",
     )
@@ -75,7 +83,9 @@ def main():
         print(f"❌ Config nicht gefunden: {args.config}")
         return 1
 
-    cfg = PipelineConfig.from_dict(yaml.safe_load(args.config.read_text()))
+    cfg = PipelineConfig.from_dict(
+        yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    )
     if not cfg.subtraction.enabled:
         print("❌ subtraction.enabled=false in der yaml – Subtraktion nicht aktiv.")
         return 1
@@ -85,7 +95,7 @@ def main():
     models = pipeline.process_scan_directory_against_cad(
         scan_dir=args.scan_dir,
         cad_step_file=args.cad,
-        source_type="real",
+        source_type=args.source_type,
         glob_patterns=tuple(args.patterns),
     )
 
@@ -142,7 +152,7 @@ def main():
     # ── CSV-Export ───────────────────────────────────────────────────
     csv_path = cfg.output.output_dir / "batch_summary.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
             "model_id", "reg_residual_mm",

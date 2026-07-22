@@ -275,6 +275,87 @@ Achsen-Zuordnung geprüft, nicht quantitativ. TODO im Test vermerkt.
 
 ---
 
+### 5.6 Rest-Drift zwischen Läufen — bewusst nicht behoben
+
+Zwei Läufe desselben Datensatzes liefern nicht exakt dieselben Zahlen.
+
+**Befund.** 14 Fälle zweimal über den echten `run_batch_subtraction.py`-Pfad,
+gleiche Config, gleicher Seed:
+
+| | Wert |
+|---|---|
+| identische Fälle | 11 von 14 |
+| max. Abweichung | **0.0040 mm** |
+| Median | 0.0000 mm |
+
+Vor Einführung der Seed-Infrastruktur lag der Drift bei 0.013 mm in 14 von 61
+Fällen. Der Seed beseitigt ihn nicht, reduziert ihn aber um etwa Faktor 3.
+
+**Einordnung.**
+
+| Vergleichsgröße | Wert | Verhältnis |
+|---|---|---|
+| Rest-Drift | 0.0040 mm | — |
+| AP2-Toleranz | 0.25 mm | **1.6 %** |
+| akzeptierter P95-Wurzeloffset (5.4) | 0.019 mm | ein Fünftel davon |
+| vom Deckflächen-Fix beseitigter Fehler (4.) | 1.3 mm | Faktor 325 kleiner |
+
+Ohne Einfluss auf eine Ampel-Klassifikation mit ±0.25-mm-Grenzen: Nur ein Fall,
+der auf 0.004 mm genau auf der Schwelle liegt, könnte kippen — und der wäre
+ohnehin ein manuell zu prüfender Grenzfall.
+
+**Kausalkette — nur teilweise aufgeklärt.** Die Quelle ist der
+nichtdeterministische RANSAC in der Segmentierung (`background_remover`,
+`flank_segmenter` über `segment_plane`). Ohne Seed wechselten bis zu 10.979 von
+504.200 Punkten (2.2 %) zwischen zwei Läufen das Label.
+
+Ursprünglich wurde OpenMPs dynamische Threadanpassung als Ursache vermutet: Ein
+Mikrobenchmark zeigte bei identischem Seed 3 verschiedene Ergebnisse aus 30
+Läufen, während ein fixiertes `OMP_NUM_THREADS` (1 oder 2) 90/90 identisch
+lieferte. **Die Gegenprobe widerlegte das als vollständige Erklärung:** im
+realistischen Aufbau — Segmentierung, Registrierung und Messung nacheinander —
+war auch der ungedrosselte Default über 3 Prozesse × 30 Läufe bitgleich.
+
+Damit ist belegt:
+- Registrierung und ICP sind deterministisch (der Messwert blieb bitgleich,
+  während ICP mit voller dynamischer Parallelität lief)
+- der Nichtdeterminismus sitzt allein in der Segmentierung
+- **die genaue Ursache des Rest-Drifts über einen echten Batch bleibt offen.**
+  Kandidaten: Speicherzustand, Thermik, konkurrierende Systemlast über die
+  Batch-Dauer. Nicht weiterverfolgt, siehe Entscheidung.
+
+**Entscheidung: kein Determinismus-Fix.** Nicht weil der Effekt „klein" ist,
+sondern quantifiziert begründet:
+
+- 1.6 % der Toleranz, unterhalb eines bereits bewusst akzeptierten
+  systematischen Offsets
+- ohne Einfluss auf die Zielgröße (Ampel-Klassifikation) und weit unterhalb
+  dessen, was physikalisch die Schweißqualität beeinflusst
+- der Preis wäre eine `ctypes`-Anbindung an die OpenMP-Runtime (plattformabhängig:
+  `vcomp140.dll` unter Windows, `libgomp`/`libiomp5` unter Linux) plus eine
+  maschinenabhängige Threadzahl, die zur Reproduzierbarkeits-Spezifikation
+  gehören würde — verschiedene Threadzahlen liefern verschiedene Werte
+
+Die Seed-Infrastruktur (`core/reproducibility.py`, `random_seed` in der Config,
+`--seed`, effektiver Seed je Modell im Report) **bleibt**: sie reduziert den
+Drift und macht nachvollziehbar, mit welcher RANSAC-Wahl ein Messwert entstanden
+ist.
+
+**Vorbehalt: synthetisch ≠ real.** Diese Zahlen gelten für synthetische Scans mit
+exakten CAD-Normalen. Bei realen Scans mit verrauschten Normalen hat RANSAC mehr
+Spielraum bei der Ebenenwahl — die Streuung kann dort größer ausfallen.
+
+*Nachmess-Plan:* dieselbe Größe einmal an den Heidenbluth-Scans messen, sobald
+verfügbar. Denselben Satz zweimal über den Batch-Pfad, `gap_root_mean_mm`
+vergleichen. Aufwand: Minuten.
+
+**Rückfalloption, falls die reale Streuung stört.** Labels einmal segmentieren,
+visuell prüfen (Cross-Section-Plots aus 5.4), persistieren — `labels.npy` liegt
+ohnehin je Modell vor. Jede nachgelagerte Auswertung läuft dann reproduzierbar
+auf festen Labels, ohne dass die OpenMP-Frage je gelöst werden muss.
+
+---
+
 ## 6. Ergebnis
 
 | Größe | vorher | nachher |

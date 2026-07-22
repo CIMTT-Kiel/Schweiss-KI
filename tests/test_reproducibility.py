@@ -9,9 +9,18 @@ niederschlug. Für die 0.25-mm-Toleranz unkritisch, als Methodik aber nicht
 haltbar – und vor allem: ohne feste Werte ist kein Referenzvergleich
 zwischen zwei Läufen definierbar.
 
-Der Test mit N Wiederholungen ist die Absicherung dagegen. Er deckt auch
-auf, wenn nach dem Open3D-Seed noch eine zweite RNG-Quelle bleibt: dann
-bliebe Rest-Drift trotz Seeding.
+Aufgeloest wurde das NICHT durch den Seed, sondern durch den
+Zwei-Ebenen-Fit in background_remover: die Streuung kam aus der
+Mehrdeutigkeit zwischen zwei konkurrierenden Deckflaechen, nicht aus
+RANSACs Zufallsstichprobe an sich. Fittet man beide Werkstueckseiten
+getrennt, gibt es je Seite nur eine Ebene – und die findet RANSAC stabil.
+
+Gemessen an R_Y_+01.000deg ueber 12 Laeufe mit wechselnden Seeds:
+    ein gemeinsamer Fit : 12 verschiedene Ergebnisse, Spanne 0.016 mm
+    zwei getrennte Fits :  1 Ergebnis, Spanne 0.000 mm
+
+Die Seed-Infrastruktur bleibt sinnvoll (protokolliert, womit ein Ergebnis
+entstand), ist fuer den Determinismus aber nicht mehr der tragende Teil.
 """
 from __future__ import annotations
 
@@ -28,7 +37,17 @@ from schweiss_ki.core.reproducibility import (
 from schweiss_ki.segmentation import SegmentationPipeline, NAME_TO_ID
 from schweiss_ki.segmentation import BackgroundRemover, FlankSegmenter, GapClassifier
 
-N_RUNS = 5
+# 15 statt 5: die zu erkennende Varianz ist flakig (der alte Ein-Ebenen-Fit
+# lieferte bei gleichem Seed mal 1, mal 2 verschiedene Ergebnisse). Mit 5
+# Wiederholungen schlug der Mutationstest nur unzuverlaessig an.
+#
+# Die urspruengliche Vorgabe waren 30 Laeufe ueber mehrere Prozesse. In der
+# Testsuite ist das nicht praktikabel - pytest laeuft in einem Prozess, und
+# 30 Segmentierungen je Test wuerden die Suite deutlich verlangsamen. 15
+# Laeufe in einem Prozess erkennen die Regression zuverlaessig; die
+# prozessuebergreifende Bestaetigung ist einmalig manuell erfolgt und in
+# docs/fehleranalyse_achsen_und_registrierung.md festgehalten.
+N_RUNS = 15
 
 
 @pytest.fixture
@@ -63,9 +82,10 @@ def v_seam_pcd():
     return pcd
 
 
-def _segment(pcd):
+def _segment(pcd, split_gap_axis: int | None = 1):
+    """Segmentierung; split_gap_axis=None entspricht dem alten Ein-Ebenen-Fit."""
     pipeline = SegmentationPipeline([
-        BackgroundRemover(),
+        BackgroundRemover(split_gap_axis=split_gap_axis),
         FlankSegmenter(expected_flank_angle_deg=45.0),
         GapClassifier(),
     ])
@@ -107,34 +127,25 @@ class TestSeedDerivation:
 
 
 class TestSegmentationDeterminism:
-    def test_unseeded_segmentation_varies(self, v_seam_pcd):
-        """Gegenprobe: ohne Seeding streut die Segmentierung tatsaechlich.
+    def test_single_plane_fit_varies(self, v_seam_pcd):
+        """Gegenprobe: der ALTE Ein-Ebenen-Fit streut auf dieser Fixture.
 
-        Ohne diesen Test koennte der Determinismus-Test unten auf einer
-        Fixture laufen, bei der RANSAC ohnehin immer dasselbe liefert – und
-        waere damit wertlos.
+        Belegt zweierlei:
+        1. Die Fixture erzeugt ueberhaupt RANSAC-Varianz – ohne das waere der
+           Determinismus-Test unten aussagelos.
+        2. Die Varianz kam aus der MEHRDEUTIGKEIT, nicht aus RANSACs
+           Zufallsstichprobe an sich: bei zwei gegeneinander verkippten
+           Deckflaechen musste ein gemeinsamer Fit zwischen ihnen waehlen, und
+           die Wahl fiel je nach Stichprobe anders aus.
         """
         runs = []
         for i in range(N_RUNS):
-            seed_everything(1000 + i)      # bewusst je Lauf anders
-            runs.append(_segment(v_seam_pcd))
+            seed_everything(1000 + i)
+            runs.append(_segment(v_seam_pcd, split_gap_axis=None))
         assert any((r != runs[0]).any() for r in runs[1:]), (
             "Fixture erzeugt keine RANSAC-Varianz – Determinismus-Test waere aussagelos"
         )
 
-    @pytest.mark.xfail(
-        reason=(
-            "Open3D 0.19 segment_plane ist auch mit gesetztem "
-            "o3d.utility.random.seed() nicht reproduzierbar: 3 Prozesse a 30 "
-            "Laeufe mit identischem Seed lieferten je 3 verschiedene "
-            "Ergebnisse (~85-90 %% identisch, Rest abweichend). Das Muster ist "
-            "last- und timingabhaengig, vermutlich OpenMP-Parallelitaet mit "
-            "racy RNG-Verbrauch - ein Seed kann das prinzipiell nicht "
-            "beheben. Test bleibt als Zielvorgabe stehen; er wird gruen, "
-            "sobald die Thread-Anzahl fixiert ist (in Pruefung)."
-        ),
-        strict=False,
-    )
     def test_seeded_segmentation_is_bit_identical(self, v_seam_pcd):
         """Kernforderung: gleicher Seed -> bitgleiche Labels ueber N Laeufe."""
         runs = []
@@ -149,19 +160,6 @@ class TestSegmentationDeterminism:
                 f"es bleibt eine ungeseedete RNG-Quelle"
             )
 
-    @pytest.mark.xfail(
-        reason=(
-            "Open3D 0.19 segment_plane ist auch mit gesetztem "
-            "o3d.utility.random.seed() nicht reproduzierbar: 3 Prozesse a 30 "
-            "Laeufe mit identischem Seed lieferten je 3 verschiedene "
-            "Ergebnisse (~85-90 %% identisch, Rest abweichend). Das Muster ist "
-            "last- und timingabhaengig, vermutlich OpenMP-Parallelitaet mit "
-            "racy RNG-Verbrauch - ein Seed kann das prinzipiell nicht "
-            "beheben. Test bleibt als Zielvorgabe stehen; er wird gruen, "
-            "sobald die Thread-Anzahl fixiert ist (in Pruefung)."
-        ),
-        strict=False,
-    )
     def test_label_counts_stable(self, v_seam_pcd):
         """Zusaetzliche Sicht auf dieselbe Forderung, mit lesbarer Diagnose."""
         counts = []
@@ -173,19 +171,6 @@ class TestSegmentationDeterminism:
 
 
 class TestMeasurementDeterminism:
-    @pytest.mark.xfail(
-        reason=(
-            "Open3D 0.19 segment_plane ist auch mit gesetztem "
-            "o3d.utility.random.seed() nicht reproduzierbar: 3 Prozesse a 30 "
-            "Laeufe mit identischem Seed lieferten je 3 verschiedene "
-            "Ergebnisse (~85-90 %% identisch, Rest abweichend). Das Muster ist "
-            "last- und timingabhaengig, vermutlich OpenMP-Parallelitaet mit "
-            "racy RNG-Verbrauch - ein Seed kann das prinzipiell nicht "
-            "beheben. Test bleibt als Zielvorgabe stehen; er wird gruen, "
-            "sobald die Thread-Anzahl fixiert ist (in Pruefung)."
-        ),
-        strict=False,
-    )
     def test_gap_measurement_bit_identical(self, v_seam_pcd):
         """Der Messwert selbst – das, was am Ende zaehlt – ist reproduzierbar."""
         from schweiss_ki.subtraction.deviation.gap_profile import GapProfile
@@ -204,12 +189,16 @@ class TestMeasurementDeterminism:
             f"Spaltbreite schwankt ueber {N_RUNS} Laeufe: {values}"
         )
 
-    def test_different_seeds_give_spread(self, v_seam_pcd):
-        """Belegt, dass der Seed die RANSAC-Wahl wirklich steuert.
+    def test_result_is_seed_independent(self, v_seam_pcd):
+        """Mit dem Zwei-Ebenen-Fit haengt das Ergebnis nicht mehr am Seed.
 
-        Zugleich die Grundlage fuer eine spaetere Streuungsanalyse: mehrere
-        Basis-Seeds fahren und die Spannweite als Mass fuer die
-        Messunsicherheit gegen die RANSAC-Willkuer auswerten.
+        Die staerkere Aussage gegenueber blossem Determinismus: es gibt keine
+        RANSAC-Wahl mehr zu treffen, weil je Werkstueckseite nur eine Ebene
+        existiert. Der Seed ist damit fuer die Reproduzierbarkeit nicht mehr
+        tragend – er bleibt nur als Protokoll, womit ein Ergebnis entstand.
+
+        Faellt dieser Test, ist wieder eine Mehrdeutigkeit im Spiel und die
+        Streuung ueber Seeds waere neu zu quantifizieren.
         """
         from schweiss_ki.subtraction.deviation.gap_profile import GapProfile
         from schweiss_ki.subtraction.reports import DeviationData
@@ -224,6 +213,8 @@ class TestMeasurementDeterminism:
             values.append(art.get("gap_root_mean_mm"))
 
         assert all(v is not None for v in values)
-        # Die Streuung ist klein, aber vorhanden – und deutlich unter Toleranz
         spread = max(values) - min(values)
-        assert spread < 0.25, f"Streuung ueber Seeds zu gross: {spread:.4f} mm"
+        assert spread == 0.0, (
+            f"Ergebnis haengt ueber {N_RUNS} Basis-Seeds noch am Seed "
+            f"(Spanne {spread:.6f} mm) – es gibt wieder eine Mehrdeutigkeit"
+        )

@@ -282,3 +282,166 @@ class TestTopPlaneRobustness:
         # Referenzebene bleibt unbeeinflusst -> Spaltbreite unveraendert
         clean = measure(step, pcd, lbl)["artifacts"]["gap_root_mean_mm"]
         assert a["gap_root_mean_mm"] == pytest.approx(clean, abs=0.02)
+
+
+# ---------------------------------------------------------------------------
+# 3. Persistenz – Round-Trip durch subtraction_report.json
+# ---------------------------------------------------------------------------
+
+class TestProfileRoundTrip:
+    """Das gap_profile muss den Weg durch die JSON unveraendert ueberstehen.
+
+    Die Luecke, die diese Tests schliessen: gap_profile wurde zunaechst gar
+    nicht serialisiert. In der Pipeline fiel das nicht auf (Plots entstehen
+    direkt nach der Berechnung, alles noch im Speicher), im Notebook nach
+    WeldVolumeModel.load() aber schon – dort fiel der Plot still auf die
+    alte z=0-Darstellung zurueck.
+    """
+
+    @staticmethod
+    def _model_with_profile(tmp_path, step, v_seam):
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+        from schweiss_ki.subtraction.reports import SubtractionReport
+
+        pcd, lbl = v_seam
+        data = DeviationData()
+        step._apply(pcd, pcd, data, lbl, None)
+        model = WeldVolumeModel(
+            model_id="roundtrip",
+            source_type="synthetic",
+            source_file=tmp_path / "quelle.ply",
+            point_cloud=pcd,
+            labels=lbl,
+            subtraction_report=SubtractionReport(
+                cad_source_file=None, deviation=data
+            ),
+        )
+        return model, data.gap_profile
+
+    def test_anchored_gap_survives_roundtrip(self, tmp_path, step, v_seam):
+        """Kernforderung: die verankerte Spaltbreite ist nach dem Laden gleich."""
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+
+        model, before = self._model_with_profile(tmp_path, step, v_seam)
+        loaded = WeldVolumeModel.load(model.save(tmp_path))
+        after = loaded.subtraction_report.deviation.gap_profile
+
+        assert after is not None, "gap_profile fehlt nach dem Laden"
+        np.testing.assert_allclose(
+            np.asarray(after["gap_root_widths"], dtype=float),
+            np.asarray(before["gap_root_widths"], dtype=float),
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+
+    def test_all_plot_relevant_fields_survive(self, tmp_path, step, v_seam):
+        """Alles, was plot_cross_section braucht, liegt am erwarteten Ort.
+
+        Sonst steht zwar etwas in der JSON, der Plot findet es aber nicht.
+        """
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+
+        model, before = self._model_with_profile(tmp_path, step, v_seam)
+        after = WeldVolumeModel.load(
+            model.save(tmp_path)
+        ).subtraction_report.deviation.gap_profile
+
+        for key in ("anchored", "seam_axis", "gap_axis", "vertical_axis",
+                    "seam_axis_centers", "reference_plane", "opposite_plane",
+                    "opposite_vs_reference", "flank_a_profile",
+                    "flank_b_profile", "gap_root_widths", "d_root"):
+            assert key in after, f"Feld fehlt nach Round-Trip: {key}"
+
+        ref = after["reference_plane"]
+        for key in ("normal", "d", "inlier_ratio", "rms_mm", "n_points"):
+            assert key in ref, f"reference_plane unvollstaendig: {key}"
+        assert len(ref["normal"]) == 3
+
+        for side in ("flank_a_profile", "flank_b_profile"):
+            for key in ("q0", "slope", "r2", "rms", "n_points", "d_lo", "d_hi"):
+                assert key in after[side], f"{side} unvollstaendig: {key}"
+                np.testing.assert_allclose(
+                    np.asarray(after[side][key], dtype=float),
+                    np.asarray(before[side][key], dtype=float),
+                    rtol=0, atol=1e-12, equal_nan=True,
+                )
+
+        for key in ("height_offset_mm", "tilt_total_deg",
+                    "tilt_along_seam_deg", "tilt_across_gap_deg"):
+            assert key in after["opposite_vs_reference"], f"relative Lage: {key}"
+
+    def test_nan_bins_stay_nan(self, tmp_path):
+        """Verworfene Bins bleiben NaN – nicht 0, nicht None.
+
+        Ein vom Gate verworfener Bin darf nach dem Laden nicht als gueltiger
+        Messwert 0.0 wiederauftauchen.
+        """
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+
+        pcd, lbl = make_v_seam(seam_length=40.0, n_flank=1500)
+        sparse = GapProfile(seam_axis=0, gap_axis=1, vertical_axis=2,
+                            n_bins=20, edge_margin=12.0,
+                            min_points_per_flank_bin=40)
+        model, before = self._model_with_profile(tmp_path, sparse, (pcd, lbl))
+        assert np.isnan(np.asarray(before["gap_root_widths"], dtype=float)).any(), \
+            "Setup-Annahme: es sollten Bins verworfen werden"
+
+        after = WeldVolumeModel.load(
+            model.save(tmp_path)
+        ).subtraction_report.deviation.gap_profile
+        np.testing.assert_array_equal(
+            np.isnan(np.asarray(after["gap_root_widths"], dtype=float)),
+            np.isnan(np.asarray(before["gap_root_widths"], dtype=float)),
+        )
+
+    def test_report_json_is_utf8(self, tmp_path, step, v_seam):
+        """Vierte Stelle derselben Encoding-Klasse: der JSON-Schreib-/Lesepfad.
+
+        Konkret fuer diesen Pfad verifiziert statt per Annahme.
+        """
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+
+        model, _ = self._model_with_profile(tmp_path, step, v_seam)
+        model.metadata = {"kommentar": "Fase größer als Sollmaß – Δ 0.3 mm, 45°"}
+        model_dir = model.save(tmp_path)
+
+        (model_dir / "subtraction_report.json").read_bytes().decode("utf-8")
+
+        loaded = WeldVolumeModel.load(model_dir)
+        assert loaded.metadata["kommentar"] == model.metadata["kommentar"]
+        assert loaded.subtraction_report.deviation.gap_profile is not None
+
+    def test_old_report_without_profile_loads_cleanly(self, tmp_path, step, v_seam):
+        """Abwaertskompatibilitaet: Reports aus Laeufen vor der Serialisierung.
+
+        Die 61 bereits geschriebenen Reports haben das Feld nicht. load()
+        faellt sauber auf 'kein Profil' zurueck statt zu crashen.
+        """
+        import json
+        from schweiss_ki.core.data_structures import WeldVolumeModel
+
+        model, _ = self._model_with_profile(tmp_path, step, v_seam)
+        model_dir = model.save(tmp_path)
+
+        report_path = model_dir / "subtraction_report.json"
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+        data["deviation"].pop("gap_profile", None)
+        report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        loaded = WeldVolumeModel.load(model_dir)
+        assert loaded.subtraction_report is not None
+        assert loaded.subtraction_report.deviation.gap_profile is None
+
+    def test_plot_names_the_real_reason(self, tmp_path, step, v_seam):
+        """Der Plot unterscheidet 'Profil nicht im Report' von 'nicht
+        verankert' – sonst debuggt man die Verankerung, obwohl nur die
+        Daten fehlen."""
+        import matplotlib
+        matplotlib.use("Agg")
+        from schweiss_ki.subtraction.plots import plot_cross_section
+
+        model, _ = self._model_with_profile(tmp_path, step, v_seam)
+        model.subtraction_report.deviation.gap_profile = None
+
+        fig = plot_cross_section(model, 20.0, 24.0)
+        texts = " ".join(t.get_text() for t in fig.axes[0].texts)
+        assert "nicht im Report" in texts, texts

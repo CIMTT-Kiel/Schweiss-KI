@@ -369,11 +369,29 @@ def plot_cross_section(
         ax.axhline(0, color=COLOR_GUIDE, linestyle=":", alpha=0.6,
                    label="z = 0 (alte Bezugsebene)")
 
+    # Fehlende Verankerung sichtbar machen, nicht nur loggen – und die
+    # Ursachen auseinanderhalten. Ein alter Report ohne gap_profile darf
+    # nicht wie eine fehlgeschlagene Verankerung aussehen, sonst debuggt
+    # man spaeter die Verankerung, obwohl nur die Daten fehlen.
     if show_anchored and not drawn_anchored:
-        logger.debug(
-            "  plot_cross_section: keine verankerte Auswertung im Fenster "
-            "(kein gap_profile, nicht verankert, oder kein Bin-Zentrum in "
-            f"[{x_min}, {x_max}])"
+        if profile is None:
+            grund = ("Profil nicht im Report – vor Einfuehrung der\n"
+                     "Serialisierung geschrieben. Batch neu laufen lassen.")
+        elif not profile.get("anchored"):
+            ref = profile.get("reference_plane") or {}
+            ir = ref.get("inlier_ratio")
+            grund = ("Verankerung fehlgeschlagen"
+                     + (f" (inlier_ratio {ir:.3f})" if ir is not None else ""))
+        else:
+            grund = f"kein Bin-Zentrum in X ∈ [{x_min:.1f}, {x_max:.1f}]"
+        logger.warning(f"  plot_cross_section: keine verankerte Auswertung – {grund}")
+        ax.text(
+            0.02, 0.02, f"⚠ keine verankerte Auswertung\n{grund}",
+            transform=ax.transAxes, fontsize=8, va="bottom", ha="left",
+            color=COLOR_REFERENCE,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="#FFF3E0",
+                      edgecolor=COLOR_GUIDE, alpha=0.95),
+            zorder=20,
         )
     # ── Ausschnitt auf die Naht begrenzen ─────────────────────────────
     # Die Deckflächen reichen über die volle Blechbreite (±50 mm), die Naht

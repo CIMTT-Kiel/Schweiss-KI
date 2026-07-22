@@ -16,6 +16,24 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 
+def _jsonable(value: Any) -> Any:
+    """Rekursive JSON-Konvertierung: numpy-Arrays/Skalare → Listen/Python-Typen.
+
+    NaN bleibt NaN – json.dump schreibt das als `NaN`, json.load liest es
+    zurück. Für die Flankenprofile ist das gewollt: ein verworfener Bin ist
+    NaN und muss auch nach dem Round-Trip NaN sein, nicht 0 oder None.
+    """
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (np.floating, np.integer, np.bool_)):
+        return value.item()
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    return value
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Registration Reports
 # ─────────────────────────────────────────────────────────────────────────
@@ -202,6 +220,14 @@ class DeviationData:
         # ComponentRegistration – ist bereits ein flaches Dict mit Listen
         if self.component_registration is not None:
             result["component_registration"] = self.component_registration
+
+        # GapProfile – verschachtelt (Ebenen-Dicts, Flankenprofile je Bin).
+        # Wird vollstaendig serialisiert, damit plot_cross_section die
+        # verankerte Auswertung auch nach WeldVolumeModel.load() zeichnen
+        # kann. Ohne das faellt der Plot im Notebook still auf die alte
+        # z=0-Darstellung zurueck.
+        if self.gap_profile is not None:
+            result["gap_profile"] = _jsonable(self.gap_profile)
 
         # VoxelDeviation – numpy-Arrays zu Listen konvertieren
         if self.voxel_deviation is not None:

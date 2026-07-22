@@ -205,11 +205,29 @@ class WeldVolumeModel:
         if "subtraction_file" in meta:
             subtraction_file = model_dir / meta["subtraction_file"]
             if subtraction_file.exists():
-                from ..subtraction.reports import SubtractionReport
+                from ..subtraction.reports import DeviationData, SubtractionReport
                 with open(subtraction_file, "r", encoding="utf-8") as f:
                     sub_data = json.load(f)
+
+                # gap_profile zurueckholen, damit plot_cross_section die
+                # verankerte Auswertung auch nach dem Laden zeichnen kann.
+                # Die Struktur bleibt exakt die von GapProfile geschriebene;
+                # Arrays kommen als Listen zurueck, was alle Konsumenten
+                # (np.asarray) vertragen.
+                #
+                # Abwaertskompatibel: Reports aus Laeufen vor der
+                # Serialisierung haben das Feld nicht. Dann bleibt
+                # gap_profile None – kein Fehler, und der Plot weist es als
+                # "Profil nicht im Report" aus statt es als "nicht
+                # verankert" zu tarnen.
+                deviation = DeviationData()
+                gp_raw = (sub_data.get("deviation") or {}).get("gap_profile")
+                if gp_raw is not None:
+                    deviation.gap_profile = gp_raw
+
                 subtraction_report = SubtractionReport(
                     cad_source_file=sub_data.get("cad_source_file"),
+                    deviation=deviation,
                 )
                 extra_metadata["subtraction_report_raw"] = sub_data
 

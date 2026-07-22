@@ -398,7 +398,7 @@ class PreprocessingPipeline:
         from .normalization import Centerer, NormalEstimator
 
         config_path = Path(config_path)
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         cfg = config.get("preprocessing", config)

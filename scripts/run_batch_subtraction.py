@@ -75,7 +75,9 @@ def main():
         print(f"❌ Config nicht gefunden: {args.config}")
         return 1
 
-    cfg = PipelineConfig.from_dict(yaml.safe_load(args.config.read_text()))
+    cfg = PipelineConfig.from_dict(
+        yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    )
     if not cfg.subtraction.enabled:
         print("❌ subtraction.enabled=false in der yaml – Subtraktion nicht aktiv.")
         return 1
@@ -142,7 +144,7 @@ def main():
     # ── CSV-Export ───────────────────────────────────────────────────
     csv_path = cfg.output.output_dir / "batch_summary.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
             "model_id", "reg_residual_mm",

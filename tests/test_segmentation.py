@@ -809,7 +809,7 @@ segmentation:
       vertical_axis: 2
 """
         config_path = tmp_path / "config.yaml"
-        config_path.write_text(config)
+        config_path.write_text(config, encoding="utf-8")
 
         pipeline = SegmentationPipeline.from_config(config_path)
         for step in pipeline.steps:
@@ -915,7 +915,7 @@ segmentation:
       gap_margin: 0.75
 """
         config_path = tmp_path / "config.yaml"
-        config_path.write_text(config)
+        config_path.write_text(config, encoding="utf-8")
 
         pipeline = SegmentationPipeline.from_config(config_path)
         step_names = [s.name for s in pipeline.steps]
@@ -933,7 +933,7 @@ segmentation:
       enabled: true
 """
         config_path = tmp_path / "config.yaml"
-        config_path.write_text(config)
+        config_path.write_text(config, encoding="utf-8")
 
         pipeline = SegmentationPipeline.from_config(config_path)
         step_names = [s.name for s in pipeline.steps]
@@ -950,7 +950,7 @@ segmentation:
       normal_cos_threshold: 0.88
 """
         config_path = tmp_path / "config.yaml"
-        config_path.write_text(config)
+        config_path.write_text(config, encoding="utf-8")
 
         pipeline = SegmentationPipeline.from_config(config_path)
         step = pipeline.steps[0]
@@ -966,7 +966,7 @@ segmentation:
       enabled: true
 """
         config_path = tmp_path / "config.yaml"
-        config_path.write_text(config)
+        config_path.write_text(config, encoding="utf-8")
 
         with pytest.raises(ValueError, match="Unbekannter Segmentation-Step"):
             SegmentationPipeline.from_config(config_path)

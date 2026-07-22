@@ -698,7 +698,7 @@ class Pipeline:
             return False
 
         try:
-            with open(cache_info_file) as f:
+            with open(cache_info_file, encoding="utf-8") as f:
                 info = json.load(f)
         except (json.JSONDecodeError, OSError):
             return False
@@ -756,7 +756,7 @@ class Pipeline:
             "n_points": len(pcd.points),
             "has_normals": pcd.has_normals(),
         }
-        with open(cache_dir / "cache_info.json", "w") as f:
+        with open(cache_dir / "cache_info.json", "w", encoding="utf-8") as f:
             json.dump(cache_info, f, indent=2)
 
         return pcd

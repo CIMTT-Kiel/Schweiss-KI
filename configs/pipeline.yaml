@@ -120,10 +120,17 @@ preprocessing:
 #
 # Labels:
 #   0 = background          (Werkstück-Oberseite, Umgebung, Artefakte außerhalb Naht)
-#   1 = flank_a             (Linke V-Fase, Normale n_x > 0)
-#   2 = flank_b             (Rechte V-Fase, Normale n_x < 0)
+#   1 = flank_a             (V-Fase auf negativer gap_axis-Seite, n[gap_axis] > 0)
+#   2 = flank_b             (V-Fase auf positiver gap_axis-Seite, n[gap_axis] < 0)
 #   3 = gap_region          (Freier Raum zwischen den Fasen)
 #   4 = sub_gap_artifacts   (Punkte unterhalb Flanken-Unterkante, z.B. Durchstich)
+#
+# Achsen-Konvention (identisch zur Subtraktions-Stage weiter unten):
+#   seam_axis     = 0 (X) – Naht-Längsrichtung
+#   gap_axis      = 1 (Y) – Spalt-Querrichtung
+#   vertical_axis = 2 (Z) – Tiefe
+# Muss zur tatsächlichen Lage der Naht passen, sonst findet der
+# flank_segmenter 0 Kandidaten (Symptom: alles wird Label 0).
 # -----------------------------------------------------------------------------
 segmentation:
   enabled: true
@@ -146,14 +153,20 @@ segmentation:
       ransac_n: 3
       expected_flank_angle_deg: 45.0  # Flanke zur Vertikalen (90° V-Naht)
       normal_cos_threshold: 0.85      # lenient: ±32° Abweichung zugelassen
+      seam_axis: 0                    # 0=X – Naht-Längsrichtung
+      gap_axis: 1                     # 1=Y – Flanken-Normalen zeigen entlang ±Y
+      vertical_axis: 2                # 2=Z – Tiefe
 
     # 3. Rest zwischen Flanken als Gap / Sub-Gap-Artefakte klassifizieren
     gap_classifier:
       enabled: true
       z_lower_quantile: 0.05
-      x_margin: 0.5
+      gap_margin: 0.5
       separate_sub_gap_artifacts: true
-      gap_width_y_bins: 20
+      gap_width_bins: 20
+      seam_axis: 0
+      gap_axis: 1
+      vertical_axis: 2
 
 
 # ── Stage 4: Subtraktion (AP2.2) ─────────────────────────────────────────────

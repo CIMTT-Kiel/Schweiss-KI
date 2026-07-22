@@ -4,20 +4,33 @@ Flanken-Segmentierung via zweimal RANSAC (AP2.1 Phase 3).
 Segmentiert die beiden schrägen V-Fasen getrennt, mit Normalen-Vorfilter
 zur Unterscheidung links (Flank A) vs. rechts (Flank B).
 
+Achsen-Konvention (identisch zur Subtraktions-Stage):
+    seam_axis     – Naht-Längsrichtung          (Default 0 = X)
+    gap_axis      – Spalt-Querrichtung          (Default 1 = Y)
+    vertical_axis – Tiefe                       (Default 2 = Z)
+
 Konvention:
-    Flank A = linke V-Fase,  Normale ≈ ( cos(α),  0, sin(α)),  n_x > 0
-    Flank B = rechte V-Fase, Normale ≈ (-cos(α),  0, sin(α)),  n_x < 0
+    Flank A = Fase auf der negativen gap_axis-Seite,
+              Normale ≈ ( cos(α) entlang +gap_axis, sin(α) entlang +vertical_axis)
+    Flank B = Fase auf der positiven gap_axis-Seite,
+              Normale ≈ (-cos(α) entlang  gap_axis, sin(α) entlang +vertical_axis)
     α = expected_flank_angle_deg (Winkel der Flanke zur Vertikalen)
 
-    Für die nominelle 60° V-Naht (Öffnungswinkel = 60°, je 30° pro Seite):
-        Flank A expected: (0.866, 0, 0.5)
-        Flank B expected: (-0.866, 0, 0.5)
+    Für die nominelle 90° V-Naht (Öffnungswinkel = 90°, je 45° pro Seite)
+    mit Default-Achsen (gap=Y, vertical=Z):
+        Flank A expected: (0,  0.707, 0.707)
+        Flank B expected: (0, -0.707, 0.707)
 
 Voraussetzung:
     Normalen müssen konsistent "nach außen" orientiert sein (d.h. vom
-    Werkstück-Inneren weg). Bei CMM-Scan von oben entspricht das n_z > 0
-    für die Flanken. Liefert das Preprocessing flipped Normalen, findet
-    dieser Step 0 Kandidaten → Warnung im Report.
+    Werkstück-Inneren weg). Bei CMM-Scan von oben entspricht das
+    n[vertical_axis] > 0 für die Flanken. Liefert das Preprocessing flipped
+    Normalen, findet dieser Step 0 Kandidaten → Warnung im Report.
+
+    Ebenso kritisch: passt gap_axis nicht zur tatsächlichen Lage der Naht,
+    liegt der maximale cos-Wert der Flanken bei nur cos(2α)-nahen Werten und
+    der Step findet 0 Kandidaten, während die Deckfläche fälschlich die
+    höchsten cos-Werte liefert. Achsen daher immer gegen die Daten prüfen.
 """
 from __future__ import annotations
 
@@ -26,7 +39,7 @@ import logging
 import numpy as np
 import open3d as o3d
 
-from .base import SegmentationStep
+from .base import SegmentationStep, validate_axes
 from .labels import NAME_TO_ID, UNLABELED
 
 logger = logging.getLogger(__name__)
@@ -51,7 +64,7 @@ class FlankSegmenter(SegmentationStep):
     Artefakte:
         flank_a / flank_b jeweils mit:
             status, plane_model, plane_normal, angle_from_vertical_deg,
-            n_candidates, n_inliers
+            n_candidates, n_inliers, cos_max
     """
 
     def __init__(
@@ -61,6 +74,9 @@ class FlankSegmenter(SegmentationStep):
         ransac_n: int = 3,
         expected_flank_angle_deg: float = 30.0,
         normal_cos_threshold: float = 0.85,
+        seam_axis: int = 0,
+        gap_axis: int = 1,
+        vertical_axis: int = 2,
         enabled: bool = True,
     ):
         """
@@ -70,10 +86,17 @@ class FlankSegmenter(SegmentationStep):
             max_iterations:           RANSAC-Iterationen.
             ransac_n:                 Min. Punkte pro RANSAC-Hypothese.
             expected_flank_angle_deg: Erwartete Flankenneigung zur Vertikalen
-                                      in Grad. 30° = nominelle 60° V-Naht.
+                                      in Grad. 30° = nominelle 60° V-Naht,
+                                      45° = 90° V-Naht.
             normal_cos_threshold:     Signed cos-Schwelle für Kandidaten-
                                       Vorfilter. 0.85 ≈ ±32°, 0.9 ≈ ±26°,
                                       0.95 ≈ ±18°.
+            seam_axis:                Naht-Längsrichtung (0=X, 1=Y, 2=Z).
+            gap_axis:                 Spalt-Querrichtung – die Achse, entlang
+                                      derer die Flanken-Normalen auseinander
+                                      zeigen.
+            vertical_axis:            Tiefenrichtung, Flanken-Normalen haben
+                                      hier eine positive Komponente.
             enabled:                  Step aktiv/inaktiv.
         """
         self._ransac_threshold = ransac_threshold
@@ -81,15 +104,25 @@ class FlankSegmenter(SegmentationStep):
         self._ransac_n = ransac_n
         self._expected_flank_angle_deg = expected_flank_angle_deg
         self._normal_cos_threshold = normal_cos_threshold
+        self._seam_axis, self._gap_axis, self._vertical_axis = validate_axes(
+            seam_axis, gap_axis, vertical_axis
+        )
         self._enabled = enabled
 
         alpha = np.deg2rad(expected_flank_angle_deg)
-        # Flank A (links): Normale nach rechts-oben
-        self._expected_normal_a = np.array([np.cos(alpha), 0.0, np.sin(alpha)])
-        # Flank B (rechts): Normale nach links-oben
-        self._expected_normal_b = np.array([-np.cos(alpha), 0.0, np.sin(alpha)])
+        # Flank A: Normale zeigt in +gap_axis, Flank B in -gap_axis;
+        # beide mit positiver vertical_axis-Komponente (nach oben/außen).
+        self._expected_normal_a = self._build_expected_normal(alpha, +1.0)
+        self._expected_normal_b = self._build_expected_normal(alpha, -1.0)
 
         self._last_artifacts: dict = {}
+
+    def _build_expected_normal(self, alpha: float, gap_sign: float) -> np.ndarray:
+        """Erwartete Flanken-Normale im konfigurierten Achsensystem."""
+        normal = np.zeros(3)
+        normal[self._gap_axis] = gap_sign * np.cos(alpha)
+        normal[self._vertical_axis] = np.sin(alpha)
+        return normal
 
     @property
     def name(self) -> str:
@@ -147,17 +180,22 @@ class FlankSegmenter(SegmentationStep):
         cos_sim = normals[unlabeled_idx] @ expected_normal
         candidate_mask = cos_sim > self._normal_cos_threshold
         candidate_idx = unlabeled_idx[candidate_mask]
+        cos_max = float(cos_sim.max())
 
         if len(candidate_idx) < self._ransac_n:
             logger.warning(
                 f"{self.name} ({side_name}): nur {len(candidate_idx)} Kandidaten "
-                f"nach Normalen-Filter (threshold={self._normal_cos_threshold}). "
-                f"Seite übersprungen."
+                f"nach Normalen-Filter (threshold={self._normal_cos_threshold}, "
+                f"cos_max={cos_max:.3f}). Seite übersprungen. "
+                f"Prüfen: gap_axis={self._gap_axis}/vertical_axis={self._vertical_axis} "
+                f"passend zur Naht-Lage? expected_flank_angle_deg="
+                f"{self._expected_flank_angle_deg}° korrekt? Normalen nach außen orientiert?"
             )
             return labels, {
                 "status": "insufficient_candidates",
                 "n_candidates": int(len(candidate_idx)),
                 "n_inliers": 0,
+                "cos_max": cos_max,
             }
 
         # RANSAC auf Kandidaten-Teilwolke
@@ -185,9 +223,9 @@ class FlankSegmenter(SegmentationStep):
         labels_out = labels.copy()
         labels_out[inlier_orig] = NAME_TO_ID[target_label_name]
 
-        # Winkel der gefitteten Ebene zur Vertikalen (arcsin(|n_z|))
+        # Winkel der gefitteten Ebene zur Vertikalen (arcsin(|n[vertical_axis]|))
         angle_from_vertical_deg = float(
-            np.degrees(np.arcsin(min(abs(float(normal_unit[2])), 1.0)))
+            np.degrees(np.arcsin(min(abs(float(normal_unit[self._vertical_axis])), 1.0)))
         )
 
         side_artifacts = {
@@ -202,6 +240,7 @@ class FlankSegmenter(SegmentationStep):
             "angle_from_vertical_deg": angle_from_vertical_deg,
             "n_candidates": int(len(candidate_idx)),
             "n_inliers": int(len(inlier_orig)),
+            "cos_max": cos_max,
         }
 
         return labels_out, side_artifacts
@@ -213,6 +252,9 @@ class FlankSegmenter(SegmentationStep):
             "ransac_n": self._ransac_n,
             "expected_flank_angle_deg": self._expected_flank_angle_deg,
             "normal_cos_threshold": self._normal_cos_threshold,
+            "seam_axis": self._seam_axis,
+            "gap_axis": self._gap_axis,
+            "vertical_axis": self._vertical_axis,
         }
 
     def get_artifacts(self) -> dict:

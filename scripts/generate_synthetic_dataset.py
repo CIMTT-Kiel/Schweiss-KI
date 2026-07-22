@@ -234,6 +234,16 @@ def filter_top_surface(pcd: o3d.geometry.PointCloud, nz_threshold: float = 0.5):
     Simuliert die Sichtbarkeit eines CMM-Scans von oben – nur Punkte,
     deren Oberflächen-Normale hauptsächlich nach oben zeigt (n_z > 0.5),
     werden übernommen.
+
+    TODO: nz_threshold=0.5 ist für flachere V-Nähte zu streng. Eine Flanke
+    mit Winkel α zur Vertikalen hat n_z = sin(α):
+        90° V-Naht (α=45°) → n_z = 0.707  → passiert den Filter
+        60° V-Naht (α=30°) → n_z = 0.500  → liegt exakt auf der Schwelle,
+                                            die Flanken würden komplett
+                                            herausgefiltert.
+    Vor dem Erzeugen von 60°-Datensätzen den Schwellwert an den Flanken-
+    winkel koppeln (z.B. nz_threshold = 0.5 * sin(α)). Bewusst noch nicht
+    geändert, um die bestehenden 61 Fälle nicht zu invalidieren.
     """
     normals = np.asarray(pcd.normals)
     mask = normals[:, 2] > nz_threshold

@@ -27,6 +27,35 @@ from .labels import LABELS, UNLABELED
 
 
 # ---------------------------------------------------------------------------
+# Achsen-Konvention
+# ---------------------------------------------------------------------------
+
+def validate_axes(seam_axis: int, gap_axis: int, vertical_axis: int) -> tuple[int, int, int]:
+    """
+    Prüft und normalisiert das Achsen-Tripel (0=X, 1=Y, 2=Z).
+
+    Semantik identisch zur Subtraktions-Stage (siehe
+    subtraction/deviation/gap_profile.py):
+        seam_axis     – Naht-Längsrichtung
+        gap_axis      – Spalt-Querrichtung
+        vertical_axis – Tiefe
+
+    Returns:
+        Tuple (seam_axis, gap_axis, vertical_axis) als ints.
+
+    Raises:
+        ValueError: Wenn die Achsen nicht drei verschiedene Werte aus {0,1,2} sind.
+    """
+    axes = (int(seam_axis), int(gap_axis), int(vertical_axis))
+    if set(axes) != {0, 1, 2}:
+        raise ValueError(
+            "seam_axis, gap_axis, vertical_axis müssen drei verschiedene "
+            f"Achsen aus {{0, 1, 2}} sein, sind aber: {axes[0]}, {axes[1]}, {axes[2]}"
+        )
+    return axes
+
+
+# ---------------------------------------------------------------------------
 # Report-Datenstrukturen
 # ---------------------------------------------------------------------------
 

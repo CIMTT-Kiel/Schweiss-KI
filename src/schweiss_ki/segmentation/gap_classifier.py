@@ -171,6 +171,30 @@ class GapClassifier(SegmentationStep):
         Spaltbreite pro Slice entlang seam_axis = minimaler gap_axis-Abstand
         zwischen Flanke A und B im Slice (= Rand von A bis Rand von B am Grund).
 
+        TODO – BEKANNTER BIAS, bei realen Daten unbedingt prüfen:
+          Diese Messung nutzt mit .max()/.min() reine Randstatistiken und ist
+          damit systematisch anfällig für alles, was die Punktdichte reduziert.
+          Voxel-Downsampling ersetzt Punkte durch Voxel-Schwerpunkte und zieht
+          den äußersten Flankenrand nach innen -> gemessener Spalt zu klein.
+
+          Gemessen an der synthetischen T_Y-Serie (Soll-Steigung 1.0):
+              ohne Preprocessing              : 1.0000
+              mit voxel_grid_downsampler 0.5  : 0.9757   (-2.4 %)
+          Der Bias skaliert mit der Voxelgröße, nicht mit dem Spalt, wirkt
+          also als konstanter Faktor.
+
+          Für synthetische Daten ist er umgangen (Preprocessing aus, siehe
+          source_type_overrides.synthetic in configs/pipeline.yaml). Bei realen
+          Scans kommt er zurück, sobald aus Performance- oder Dichtegründen
+          downgesampelt wird – dort aber vom Messrauschen maskiert und damit
+          schwer zu bemerken. Er verschwindet nicht, er wird nur unsichtbar.
+
+          Robuster Ersatz statt .max()/.min():
+            - Perzentile (99./1.) statt Extremwerte, oder
+            - Flankenebenen-Fit je Slice und Schnitt auf fester Höhe, analog
+              zu GapProfile._extrapolate_to_z0() in subtraction/deviation/ –
+              das hängt nicht an einzelnen Randpunkten.
+
         Returns:
             Array shape (N, 2) mit Spalten [seam_center, width]. Leere Slices
             (zu wenige Punkte) werden übersprungen.

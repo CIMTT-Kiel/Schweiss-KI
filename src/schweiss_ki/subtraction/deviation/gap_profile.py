@@ -184,6 +184,97 @@ class GapProfile(DeviationStep):
         """Lineare Anpassung y(z) = m·z + y0, gibt y0 zurück.
 
         y = pts[:, gap_axis], z = pts[:, vertical_axis].
+
+        Robust gegen Downsampling: der Fit nutzt alle Flankenpunkte des Bins,
+        nicht die Randpunkte. Damit fehlt hier der Bias, der
+        GapClassifier._compute_gap_width_by_seam() über .max()/.min() trifft
+        (dort dokumentiert).
+
+        Genauigkeit dieser Methode selbst: EXAKT. Auf den unregistrierten
+        synthetischen T_Y-Scans liefert sie Steigung 1.0000 mit Fehlern
+        < 0.001 mm über den gesamten Bereich ty = -1.5 .. +1.5 mm.
+
+        ACHTUNG – die Auswertungshöhe verstärkt Fehler um 2·tan(α):
+          Die Extrapolation zielt auf vertical_axis = 0 im Koordinatensystem
+          der ÜBERGEBENEN Wolke. Ist die Wolke registriert, ist das die z=0-
+          Ebene NACH der Registrierung – ein Registrierungs-Versatz dz
+          verschiebt also die Auswertungshöhe.
+
+          Eine V-Naht mit Flankenwinkel α zur Vertikalen öffnet sich mit
+          dw/dz = 2·tan(α). Der Verstärkungsfaktor ist damit NAHT-SPEZIFISCH:
+
+              α = 45° (90°-Naht) -> Faktor 2.00      <- aktuelles Bauteil
+              α = 30° (60°-Naht) -> Faktor 1.15
+              je spitzer die Naht, desto stärker die Verstärkung
+
+          Für das aktuelle Bauteil gilt also:
+
+              Fehler_Spaltbreite = -2 · dz_Registrierung
+
+          Verifiziert über die synthetischen Fälle (Vergleich gegen dieselbe
+          Methode auf unregistrierten Rohdaten, wo sie exakt ist):
+              translation_y  n=10  Korr 0.99998  Rest-RMS 0.0004 mm
+              translation_z  n= 4  Korr 0.99999  Rest-RMS 0.0077 mm
+              rotation_x     n=10  Korr 0.99970  Rest-RMS 0.0141 mm
+              translation_combo n=5 Korr 0.99978 Rest-RMS 0.0068 mm
+          Bei rotation_x erzeugt das Fehler bis 0.94 mm, obwohl der WAHRE
+          Spalt sich kaum ändert (1.475..1.528) – die Registrierung allein
+          produziert dort die gesamte scheinbare Abweichung.
+
+          rotation_y folgt demselben Mechanismus, aber mit POSITIONSABHÄNGIGEM
+          dz: eine Restrotation der Registrierung um die gap_axis kippt die
+          Auswertungsebene, der Höhenfehler wächst linear entlang der Naht.
+          Mit dz_eff = dz - x̄·sin(ry_reg) statt dz allein:
+              ry=0.10°  Vorhersage +0.174  tatsächlich +0.174
+              ry=0.25°  Vorhersage +0.435  tatsächlich +0.432
+              ry=0.50°  Vorhersage +0.876  tatsächlich +0.849
+          Die Deckflächen-Verankerung unten räumt das mit ab: Deckfläche und
+          Flanken rotieren gemeinsam, eine daran verankerte Auswertungshöhe
+          ist rotationsinvariant.
+
+          AUSNAHME ry >= 1.0°: dort bricht die Registrierung qualitativ ein
+          (dz springt von ~0.000 auf -0.244, ICP-Residuum 0.482 – anderes
+          lokales Minimum). Modell trifft nicht mehr (+1.425 vs +0.355).
+          Dokumentierte Verfahrensgrenze; betrifft auch die Kombis mit
+          ry-Anteil (rotation_combo, translation_rotation_combo).
+
+          Ausgeschlossen als Ursache – gemessen, nicht vermutet: weder
+          Segmentierung noch Flanken-Paarung. Über ry = 0..1.0° bleiben die
+          FlankSegmenter-Kandidatenzahlen stabil (33.545 -> 31.938, -5 %),
+          und alle 20 Naht-Bins sehen durchgehend BEIDE Flanken, kein
+          einziger einseitiger Slice.
+
+          rotation_z liegt mit max 0.064 mm im Rauschen.
+
+        TODO – Auswertungshöhe an der Geometrie verankern:
+          Statt z = 0 die per RANSAC gefittete Deckflächen-Ebene als Bezug
+          nehmen (BackgroundRemover legt plane_model und z_center bereits in
+          den SegmentationReport). Damit fällt dz vollständig heraus.
+
+          ABER – die Abhängigkeit wird damit verlagert, nicht beseitigt:
+          Liegt der Deckflächen-Fit um δ daneben, steht δ an der Stelle von dz
+          und geht mit demselben Faktor 2·tan(α) ein. Die Genauigkeit der
+          Spaltbreite hängt nach dem Fix also an der QUALITÄT DER DECKFLÄCHEN-
+          EBENE – das macht die Robustheit dieses RANSAC-Fits sicherheits-
+          kritisch für die Spaltmessung.
+
+          Der Gewinn ist trotzdem real: die Deckfläche ist dicht besetzt und
+          gut konditioniert, anders als die rx-Rotation, die ICP schlecht
+          auflöst. Bei realen Scans sitzen dort aber Spritzer und Reflexionen –
+          genau die Störungen, gegen die ein RANSAC-Ebenenfit abgesichert
+          werden muss, bevor man sich auf ihn verlässt.
+
+          Schranken – die zweite ERSETZT die erste, sie ergänzt sie nicht:
+            - JETZT (z=0-Methode): für die 0.25-mm-Toleranz aus AP2 muss
+              dz < ~0.12 mm bleiben. Synthetisch erfüllt (dz < 0.04 mm),
+              bei realen Scans offen.
+            - NACH dem Fix: dz fällt heraus, das obige Kriterium wird
+              hinfällig. Maßgeblich ist dann der Fit-Fehler der Deckflächen-
+              Ebene, mit derselben Schranke δ < ~0.12 mm (bei α=45°;
+              bei flacheren Nähten entsprechend lockerer).
+          Solange die z=0-Methode noch irgendwo als Fallback existiert, bleibt
+          der Faktor winkelabhängig und muss bei anderen Öffnungswinkeln
+          (z.B. künftige Heidenbluth-Bauteile) neu bestimmt werden.
         """
         if len(pts) < self.min_points_per_bin:
             return float("nan")

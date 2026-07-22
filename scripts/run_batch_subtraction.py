@@ -64,6 +64,14 @@ def main():
              "sind rauschfrei und bringen exakte CAD-Normalen mit.",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Basis-Seed fuer reproduzierbare RANSAC-Ergebnisse. "
+             "Ueberschreibt random_seed aus der Config. Mehrere Seeds fahren, "
+             "um die Streuung gegen die RANSAC-Wahl zu quantifizieren.",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true",
         help="Debug-Level-Logging.",
     )
@@ -88,6 +96,11 @@ def main():
     cfg = PipelineConfig.from_dict(
         yaml.safe_load(args.config.read_text(encoding="utf-8"))
     )
+    if args.seed is not None:
+        cfg.random_seed = args.seed
+    logger = logging.getLogger(__name__)
+    logger.info(f"Basis-Seed: {cfg.random_seed}")
+
     if not cfg.subtraction.enabled:
         print("❌ subtraction.enabled=false in der yaml – Subtraktion nicht aktiv.")
         return 1

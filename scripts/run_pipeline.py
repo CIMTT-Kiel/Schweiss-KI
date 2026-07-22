@@ -56,6 +56,8 @@ def load_config(config_path: Path, overrides: dict) -> PipelineConfig:
         raw["input_dir"] = overrides["input_dir"]
     if overrides.get("output_dir"):
         raw.setdefault("output", {})["output_dir"] = overrides["output_dir"]
+    if overrides.get("seed") is not None:
+        raw["random_seed"] = overrides["seed"]
 
     return PipelineConfig.from_dict(raw)
 
@@ -110,6 +112,14 @@ def parse_args():
 
     # Optionen
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Basis-Seed fuer reproduzierbare RANSAC-Ergebnisse. "
+             "Ueberschreibt random_seed aus der Config. Mehrere Seeds fahren, "
+             "um die Streuung gegen die RANSAC-Wahl zu quantifizieren.",
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Debug-Logging aktivieren",
@@ -140,6 +150,7 @@ def main():
         sys.exit(1)
 
     overrides = {
+        "seed": args.seed,
         "input_dir": args.input_dir,
         "output_dir": args.output_dir,
     }

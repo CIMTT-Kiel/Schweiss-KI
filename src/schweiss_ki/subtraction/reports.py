@@ -259,6 +259,10 @@ class SubtractionReport:
     registration: RegistrationReport = field(default_factory=RegistrationReport)
     deviation: DeviationData = field(default_factory=DeviationData)
     cad_source_file: Optional[str] = None
+    random_seed: Optional[int] = None
+    """Effektiver RNG-Seed dieses Modells (aus Basis-Seed und model_id
+    abgeleitet). Gehoert zum Ergebnis: ohne ihn ist nicht nachvollziehbar,
+    mit welcher RANSAC-Wahl ein Messwert entstanden ist."""
 
     def summary(self) -> str:
         return "\n\n".join([
@@ -269,6 +273,7 @@ class SubtractionReport:
     def to_dict(self) -> dict:
         return {
             "cad_source_file": self.cad_source_file,
+            "random_seed": self.random_seed,
             "registration": self.registration.to_dict(),
             "deviation": self.deviation.to_dict(),
         }

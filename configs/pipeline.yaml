@@ -11,6 +11,16 @@
 #   Phase 5 (KW 15-…):  Subtraktion (Registrierung + Differenz)     ← aktiv
 # =============================================================================
 
+# Basis-Seed fuer reproduzierbare Ergebnisse.
+# Die Segmentierung nutzt RANSAC (segment_plane); ohne Seed liefert derselbe
+# Scan bei jedem Lauf leicht andere Labels (~2 % der Punkte) und damit ~0.013 mm
+# Streuung in der Spaltbreite. Pro Modell wird aus diesem Basis-Seed und der
+# model_id ein eigener Seed abgeleitet, damit ein einzeln nachgerechnetes
+# Bauteil denselben Wert liefert wie im Batch.
+# Ueberschreibbar per --seed. Fuer eine Streuungsanalyse mehrere Basis-Seeds
+# fahren; der effektive Seed steht je Modell im subtraction_report.json.
+random_seed: 0
+
 # Eingabeverzeichnis mit STEP-Dateien
 # Muss zum Code-Default (PipelineConfig.input_dir) und zu den --cad-Defaults
 # der Skripte in scripts/ passen.

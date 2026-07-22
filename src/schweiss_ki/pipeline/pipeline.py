@@ -19,6 +19,7 @@ import numpy as np
 import open3d as o3d
 
 from ..core.data_structures import WeldVolumeModel
+from ..core.reproducibility import seed_for_model
 from schweiss_ki.segmentation import SegmentationPipeline, LABELS
 from schweiss_ki.subtraction.deviation import DeviationPipeline
 from schweiss_ki.subtraction.registration import RegistrationPipeline
@@ -94,6 +95,7 @@ class OutputConfig:
 class PipelineConfig:
     """Hauptkonfiguration - wird aus YAML geladen"""
     input_dir: Path = Path("data/raw/step_files")
+    random_seed: int = 0
     output: OutputConfig = field(default_factory=OutputConfig)
     cad_conversion: CADConversionConfig = field(default_factory=CADConversionConfig)
     preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
@@ -107,6 +109,9 @@ class PipelineConfig:
 
         if "input_dir" in d:
             cfg.input_dir = Path(d["input_dir"])
+
+        if "random_seed" in d:
+            cfg.random_seed = int(d["random_seed"])
 
         if "output" in d:
             o = d["output"]
@@ -165,6 +170,7 @@ class Pipeline:
         # config_path wird für PreprocessingPipeline/SegmentationPipeline/
         # RegistrationPipeline/DeviationPipeline.from_config() benötigt
         self._config_path = Path(config_path) if config_path else None
+        self._effective_seed: int | None = None
         self._setup_cad_converter()
 
     def _setup_cad_converter(self):
@@ -191,6 +197,7 @@ class Pipeline:
         """
         step_file = Path(step_file)
         model_id = step_file.stem
+        self._effective_seed = seed_for_model(self.config.random_seed, model_id)
         logger.info(f"Verarbeite: {step_file.name}")
         t_start = time.time()
 
@@ -247,6 +254,12 @@ class Pipeline:
         """
         scan_file = Path(scan_file)
         model_id = scan_file.stem
+
+        # Pro Modell neu seeden, nicht einmal global: sonst haengt der RANSAC
+        # eines Modells davon ab, wie viele Aufrufe im Batch vorher passiert
+        # sind, und ein einzeln nachgerechnetes Bauteil ergaebe einen anderen
+        # Wert als im Batch.
+        self._effective_seed = seed_for_model(self.config.random_seed, model_id)
 
         if cad_step_file is not None:
             logger.info(
@@ -628,6 +641,7 @@ class Pipeline:
 
         # Report bauen
         scan_model.subtraction_report = SubtractionReport(
+            random_seed=self._effective_seed,
             registration=reg_report,
             deviation=dev_data,
             cad_source_file=str(cad_source_file) if cad_source_file else None,

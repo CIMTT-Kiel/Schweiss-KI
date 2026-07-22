@@ -131,6 +131,10 @@ gespeichert.
 
 ### 4.4 GapProfile
 
+> ⚠️ **Veraltet.** Beschreibt den Stand vor der Umstellung auf die
+> deckflächenverankerte Auswertung. Für das aktuelle Verfahren siehe
+> [`methodik_abweichungsanalyse.md`](methodik_abweichungsanalyse.md), Abschnitt 5.
+
 Wurzelspalt-Verlauf entlang der Naht-Längsrichtung, V-Naht-spezifisch.
 Der Scan wird in N Bins entlang der X-Achse geteilt; pro Bin wird über
 lineare Extrapolation der Flanken auf Z = 0 die effektive Spaltbreite

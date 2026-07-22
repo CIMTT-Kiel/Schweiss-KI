@@ -30,6 +30,7 @@ from typing import List
 
 import numpy as np
 import open3d as o3d
+from schweiss_ki.core.console import force_utf8_output
 
 
 # ── Test-Cases ──────────────────────────────────────────────────────────
@@ -354,6 +355,7 @@ def write_metadata_csv(cases: List[TestCase], output_dir: Path) -> Path:
 
 
 def main():
+    force_utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cad-cache-dir",

@@ -4,6 +4,7 @@
 from pathlib import Path
 from client.core import CADConverterClient
 import time
+from schweiss_ki.core.console import force_utf8_output
 
 # ── Konfiguration ─────────────────────────────────────────────────────────
 STEP_FILE       = Path("data/raw/step_files/Baugruppe_Beispielteil_V-Naht_1.5mm_Spalt.STEP")
@@ -118,6 +119,7 @@ def test_conversion():
 
 
 if __name__ == "__main__":
+    force_utf8_output()
     success = test_conversion()
     print("\n" + "=" * 70)
     exit(0 if success else 1)

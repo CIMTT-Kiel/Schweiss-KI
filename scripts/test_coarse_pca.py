@@ -23,6 +23,7 @@ import numpy as np
 import open3d as o3d
 
 from schweiss_ki.subtraction.registration import CoarsePCA, RegistrationPipeline
+from schweiss_ki.core.console import force_utf8_output
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -90,6 +91,7 @@ TEST_CASES = [
 # ─────────────────────────────────────────────────────────────────────────
 
 def main():
+    force_utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cad-ply",

@@ -25,9 +25,11 @@ import numpy as np
 import yaml
 
 from schweiss_ki.pipeline.pipeline import Pipeline, PipelineConfig
+from schweiss_ki.core.console import force_utf8_output
 
 
 def main():
+    force_utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scan",

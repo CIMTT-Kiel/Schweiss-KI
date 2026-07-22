@@ -26,6 +26,7 @@ from pathlib import Path
 import yaml
 
 from schweiss_ki.pipeline.pipeline import Pipeline, PipelineConfig
+from schweiss_ki.core.console import force_utf8_output
 
 
 # ─────────────────────────────────────────────
@@ -127,6 +128,7 @@ def parse_args():
 # ─────────────────────────────────────────────
 
 def main():
+    force_utf8_output()
     args = parse_args()
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)

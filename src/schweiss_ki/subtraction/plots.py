@@ -79,7 +79,7 @@ def plot_gap_profile(
         return None
 
     x_centers = np.asarray(gp["seam_axis_centers"])
-    gap_widths = np.asarray(gp["gap_widths"])
+    gap_widths = np.asarray(gp["gap_root_widths"], dtype=float)
     tolerance_mm = _get_tolerance(model)
 
     fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
@@ -99,7 +99,7 @@ def plot_gap_profile(
     ax.plot(
         x_centers, gap_widths,
         color=COLOR_MEASURED, linewidth=1.8, marker="o", markersize=4,
-        label="Gemessen (CMM-Scan)",
+        label="Gemessen (an Deckfläche verankert)",
     )
     ax.set_xlabel("Position entlang Schweißnaht (mm)")
     ax.set_ylabel("Spaltbreite (mm)")
@@ -208,7 +208,6 @@ def plot_cross_section(
     x_min: float,
     x_max: float,
     show_anchored: bool = True,
-    show_extrapolation: bool = False,
     labels_to_show: Sequence[int] = (1, 2, 3, 4),
     figsize: tuple = (9, 6.5),
 ) -> plt.Figure:
@@ -230,9 +229,6 @@ def plot_cross_section(
           von ~0.019 mm. Wer den Wert im Bild sieht, kann bei realen Scans
           beurteilen, ob P95 dort sinnvoll liegt oder die Flankenabdeckung
           ein anderes Quantil verlangt.
-
-    show_extrapolation blendet zusätzlich die alte z=0-Methode ein
-    (Default aus), solange beide Verfahren parallel laufen.
 
     Diagnostisches Werkzeug: Gratbildung, Wurzeldurchhang, Heftnähte und
     ungewöhnliche Punktverteilungen sind hier sofort sichtbar – ein r² < 1
@@ -346,28 +342,6 @@ def plot_cross_section(
                     "--", color=COLOR_REFERENCE, linewidth=1.5, alpha=0.8, zorder=5,
                     label=f"Wurzeltiefe d_root={dr:.3f} mm{gr_txt}",
                 )
-
-    # ── Legacy: lokale Extrapolation auf z = 0 ────────────────────────
-    if show_extrapolation:
-        for label_id in (1, 2):
-            lmask = mask & (model.labels == label_id)
-            sub = pts[lmask]
-            if len(sub) < 3:
-                continue
-            z = sub[:, 2]
-            y = sub[:, 1]
-            slope, y0 = np.polyfit(z, y, 1)
-            z_line = np.linspace(min(z.min(), -0.5), z.max(), 50)
-            y_line = slope * z_line + y0
-            ax.plot(
-                y_line, z_line, "--",
-                color=LABEL_COLORS[label_id], alpha=0.35, linewidth=1.2, zorder=3,
-                label=f"{LABEL_NAMES[label_id]} z=0-Extrapolation (y₀={y0:+.3f})",
-            )
-            ax.scatter([y0], [0], color=LABEL_COLORS[label_id], marker="x",
-                       s=80, alpha=0.5, zorder=7)
-        ax.axhline(0, color=COLOR_GUIDE, linestyle=":", alpha=0.6,
-                   label="z = 0 (alte Bezugsebene)")
 
     # Fehlende Verankerung sichtbar machen, nicht nur loggen – und die
     # Ursachen auseinanderhalten. Ein alter Report ohne gap_profile darf

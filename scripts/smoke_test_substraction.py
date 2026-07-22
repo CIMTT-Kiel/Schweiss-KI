@@ -143,7 +143,7 @@ def main():
     # GapProfile (falls vorhanden)
     if dev.gap_profile is not None:
         gp = dev.gap_profile
-        gw = gp["gap_widths"]
+        gw = gp["gap_root_widths"]
         valid = ~np.isnan(gw)
         n_valid = valid.sum()
         if n_valid > 0:

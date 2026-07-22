@@ -124,9 +124,8 @@ def main():
     print("Zusammenfassung Subtraktions-Batch")
     print("=" * 110)
     header = (
-        f"{'Bauteil':<30} {'Reg-Res':>9} | "
-        f"{'z0 mean':>9} {'z0 std':>8} | "
-        f"{'Wurzel mean':>12} {'Wurzel std':>11} {'inlier':>7} {'Bins':>6}"
+        f"{'Bauteil':<30} {'Reg-Res':>9} | {'Spalt min':>10} {'Spalt max':>10} "
+        f"{'Spalt mean':>11} {'Spalt std':>10} {'inlier':>7} {'Bins':>6}"
     )
     print(header)
     print("-" * 110)
@@ -145,7 +144,7 @@ def main():
 
         gp = m.subtraction_report.deviation.gap_profile
         if gp is None:
-            row = (m.model_id, reg_res) + ("-",) * 8 + ("0/0",)
+            row = (m.model_id, reg_res) + ("-",) * 6 + ("0/0",)
             print(f"{m.model_id:<30} {reg_res:>9} {'(no gap_profile)':>46}")
             rows.append(row)
             continue
@@ -165,10 +164,6 @@ def main():
                 n_valid, n_total,
             )
 
-        # alte Methode (Extrapolation auf z=0) – bleibt parallel bis der
-        # verankerte Wert bestaetigt ist
-        o_min, o_max, o_mean, o_std, _, _ = stats("gap_widths")
-        # neue Methode (verankert an der Deckflaechen-Ebene)
         r_min, r_max, r_mean, r_std, n_valid, n_total = stats("gap_root_widths")
 
         ref = gp.get("reference_plane") or {}
@@ -178,14 +173,12 @@ def main():
 
         row = (
             m.model_id, reg_res,
-            o_min, o_max, o_mean, o_std,
             r_min, r_max, r_mean, r_std,
             inlier_s, anchored, f"{n_valid}/{n_total}",
         )
         print(
-            f"{m.model_id:<30} {reg_res:>9} | "
-            f"{o_mean:>9} {o_std:>8} | "
-            f"{r_mean:>12} {r_std:>11} {inlier_s:>7} {n_valid}/{n_total:>3}"
+            f"{m.model_id:<30} {reg_res:>9} | {r_min:>10} {r_max:>10} "
+            f"{r_mean:>11} {r_std:>10} {inlier_s:>7} {n_valid}/{n_total:>3}"
         )
         rows.append(row)
 
@@ -198,9 +191,6 @@ def main():
         writer = csv.writer(f)
         writer.writerow([
             "model_id", "reg_residual_mm",
-            # alte Methode (z=0-Extrapolation), parallel bis Validierung durch
-            "gap_min_mm", "gap_max_mm", "gap_mean_mm", "gap_std_mm",
-            # neue Methode (an Deckflaechen-Ebene verankert)
             "gap_root_min_mm", "gap_root_max_mm", "gap_root_mean_mm",
             "gap_root_std_mm", "ref_plane_inlier_ratio", "anchored",
             "bins_valid",

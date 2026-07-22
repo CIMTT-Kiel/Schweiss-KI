@@ -1,27 +1,33 @@
 """
 GapProfile – Wurzelspalt-Profil entlang der Naht-Längsrichtung.
 
-Methodik:
-    - Für jede der beiden Flanken (Labels A und B) werden die segmentierten
-      Punkte entlang der Naht-Längsachse in Bins zerlegt.
-    - Pro Bin und Flanke wird eine Geradenanpassung y(z) = m·z + y₀ durchgeführt.
-    - Der Y-Schnittpunkt der Geraden mit z = 0 liefert den virtuellen
-      Wurzelpunkt der Flanke (die echten Wurzelpunkte fehlen typischerweise,
-      weil der CMM-Strahl dort keine Messung mehr aufnimmt).
-    - Die Spaltbreite pro Bin ist der Y-Abstand der beiden Wurzelpunkte.
+Methodik (an der Deckflächen-Ebene verankert):
+    - Je Werkstück wird die Deckflächen-Ebene per RANSAC gefittet. Die Ebene
+      des Referenz-Werkstücks definiert die Tiefe d = 0.
+    - Für jede der beiden Flanken werden die segmentierten Punkte entlang der
+      Naht-Längsachse in Bins zerlegt.
+    - Pro Bin und Flanke wird q(d) = q₀ + m·d gefittet, mit q = Position auf
+      der gap_axis und d = Tiefe unter der Referenzebene. Getrennte Fits, damit
+      eine fehlende Gegenflanke den anderen Fit nicht beeinträchtigt.
+    - Die Spaltbreite ist die Differenz beider Geraden, ausgewertet an der
+      tiefsten beidseitig besetzten Tiefe – ein Messwert, keine Extrapolation.
+
+Warum nicht mehr auf z = 0 extrapoliert wird:
+    Die frühere Methode zielte auf vertical_axis = 0 im Koordinatensystem der
+    registrierten Wolke. Damit ging jeder Registrierungs-Höhenversatz dz mit
+    dw/dz = 2·tan(α) in die Spaltbreite ein – bei der 90°-Naht verdoppelt.
+    Auf den 61 synthetischen Fällen war das die alleinige Ursache der
+    verbliebenen Untererfassung (Korrelation 0.99998 zwischen Fehler und
+    -2·dz), mit Fehlern bis 1.3 mm. Die Verankerung an der Deckfläche lässt dz
+    strukturell herausfallen: der Registrierungseinfluss sank auf max. 0.008 mm
+    über alle 61 Fälle. Details in docs/fehleranalyse_achsen_und_registrierung.md.
 
 Voraussetzungen:
-    - Scan ist bereits ausgerichtet (CoarsePCA + ICPFine vorher in Pipeline).
-    - source_labels enthält die Flanken-Labels (typisch 1 und 2 aus AP2.1).
+    - Scan ist bereits ausgerichtet (XEdgeAlign + ICPFine vorher in Pipeline).
+    - source_labels enthält Flanken- UND Background-Labels (aus AP2.1) –
+      letztere für die Deckflächen-Ebenen.
     - Achsen-Konvention: Naht entlang einer konfigurierbaren Achse,
       Spalt entlang einer dazu senkrechten Achse, Vertikale = Z.
-
-Konfigurierbar:
-    flank_a_label, flank_b_label     – welche Labels die Flanken bezeichnen
-    seam_axis, gap_axis, vertical_axis – Achsen-Konvention (0=X, 1=Y, 2=Z)
-    n_bins                             – Anzahl Bins entlang der Naht
-    edge_margin                        – mm an beiden Enden ausklammern (Heftpunkte)
-    min_points_per_bin                 – Mindest-Punktzahl pro Flanke und Bin
 """
 from __future__ import annotations
 
@@ -70,7 +76,6 @@ class GapProfile(DeviationStep):
         flank_depth_max_quantile: float = 0.95,
         min_points_per_flank_bin: int = 10,
         min_depth_span: float = 1.0,
-        emit_legacy_gap_widths: bool = True,
         enabled: bool = True,
     ):
         self._enabled = enabled
@@ -97,7 +102,6 @@ class GapProfile(DeviationStep):
         self.flank_depth_max_quantile = float(flank_depth_max_quantile)
         self.min_points_per_flank_bin = int(min_points_per_flank_bin)
         self.min_depth_span = float(min_depth_span)
-        self.emit_legacy_gap_widths = bool(emit_legacy_gap_widths)
 
         if len({self.seam_axis, self.gap_axis, self.vertical_axis}) != 3:
             raise ValueError(
@@ -129,7 +133,6 @@ class GapProfile(DeviationStep):
             "flank_depth_max_quantile": self.flank_depth_max_quantile,
             "min_points_per_flank_bin": self.min_points_per_flank_bin,
             "min_depth_span": self.min_depth_span,
-            "emit_legacy_gap_widths": self.emit_legacy_gap_widths,
         }
 
     # ── Hauptlogik ────────────────────────────────────────────────────
@@ -238,32 +241,6 @@ class GapProfile(DeviationStep):
                 gap_root[i] = (fb["q0"] + fb["slope"] * dr) - (fa["q0"] + fa["slope"] * dr)
                 n_valid_depth += 1
 
-        gap_widths = np.full(self.n_bins, np.nan)
-        y_a0 = np.full(self.n_bins, np.nan)
-        y_b0 = np.full(self.n_bins, np.nan)
-
-        for i, (lo, hi) in enumerate(zip(bin_edges[:-1], bin_edges[1:])):
-            mask_a = (flank_a[:, self.seam_axis] >= lo) & (flank_a[:, self.seam_axis] < hi)
-            mask_b = (flank_b[:, self.seam_axis] >= lo) & (flank_b[:, self.seam_axis] < hi)
-            sub_a = flank_a[mask_a]
-            sub_b = flank_b[mask_b]
-
-            ya = self._extrapolate_to_z0(sub_a)
-            yb = self._extrapolate_to_z0(sub_b)
-
-            if not (np.isnan(ya) or np.isnan(yb)):
-                gap_widths[i] = abs(ya - yb)
-                y_a0[i] = ya
-                y_b0[i] = yb
-
-        n_valid = int((~np.isnan(gap_widths)).sum())
-        logger.info(
-            f"  GapProfile: ausgewertet in {n_valid}/{self.n_bins} Bins, "
-            f"Spaltbreite min={np.nanmin(gap_widths):.2f}, "
-            f"max={np.nanmax(gap_widths):.2f} mm"
-            if n_valid > 0 else f"  GapProfile: keine validen Bins"
-        )
-
         if anchored:
             logger.info(
                 f"  GapProfile: verankert an Deckfläche ({self.reference_side}), "
@@ -277,7 +254,6 @@ class GapProfile(DeviationStep):
             "seam_axis": self.seam_axis,
             "gap_axis": self.gap_axis,
             "vertical_axis": self.vertical_axis,
-            # ── neu: tiefenbezogene Auswertung ────────────────────────
             "anchored": anchored,
             "flank_a_profile": prof["flank_a"],
             "flank_b_profile": prof["flank_b"],
@@ -290,15 +266,10 @@ class GapProfile(DeviationStep):
                 if (ref_plane is not None and opp_plane is not None and len(opp_pts))
                 else None
             ),
-            # ── legacy: Extrapolation auf z=0, bis Validierung sauber ─
-            "gap_widths": gap_widths if self.emit_legacy_gap_widths else None,
-            "y_a_root": y_a0 if self.emit_legacy_gap_widths else None,
-            "y_b_root": y_b0 if self.emit_legacy_gap_widths else None,
         }
 
         artifacts: Dict[str, Any] = {
             "n_bins_total": self.n_bins,
-            "n_bins_valid": n_valid,
             "n_bins_valid_depth": n_valid_depth,
             "anchored": anchored,
             "seam_range_used": (float(seam_min), float(seam_max)),
@@ -334,13 +305,6 @@ class GapProfile(DeviationStep):
             if len(ang) == 2:
                 artifacts["flank_angle_asymmetry_deg"] = abs(ang["flank_a"] - ang["flank_b"])
 
-        if n_valid > 0 and self.emit_legacy_gap_widths:
-            artifacts.update({
-                "gap_min_mm": float(np.nanmin(gap_widths)),
-                "gap_max_mm": float(np.nanmax(gap_widths)),
-                "gap_mean_mm": float(np.nanmean(gap_widths)),
-                "gap_std_mm": float(np.nanstd(gap_widths)),
-            })
         return artifacts
 
     # ── Deckflächen-Verankerung ───────────────────────────────────────
@@ -458,111 +422,3 @@ class GapProfile(DeviationStep):
         if float(d.max() - d.min()) < self.min_depth_span:
             return None
         return self._fit_line(d, pts[band, self.gap_axis])
-
-    # ── Helfer ────────────────────────────────────────────────────────
-
-    def _extrapolate_to_z0(self, pts: np.ndarray) -> float:
-        """Lineare Anpassung y(z) = m·z + y0, gibt y0 zurück.
-
-        y = pts[:, gap_axis], z = pts[:, vertical_axis].
-
-        Robust gegen Downsampling: der Fit nutzt alle Flankenpunkte des Bins,
-        nicht die Randpunkte. Damit fehlt hier der Bias, der
-        GapClassifier._compute_gap_width_by_seam() über .max()/.min() trifft
-        (dort dokumentiert).
-
-        Genauigkeit dieser Methode selbst: EXAKT. Auf den unregistrierten
-        synthetischen T_Y-Scans liefert sie Steigung 1.0000 mit Fehlern
-        < 0.001 mm über den gesamten Bereich ty = -1.5 .. +1.5 mm.
-
-        ACHTUNG – die Auswertungshöhe verstärkt Fehler um 2·tan(α):
-          Die Extrapolation zielt auf vertical_axis = 0 im Koordinatensystem
-          der ÜBERGEBENEN Wolke. Ist die Wolke registriert, ist das die z=0-
-          Ebene NACH der Registrierung – ein Registrierungs-Versatz dz
-          verschiebt also die Auswertungshöhe.
-
-          Eine V-Naht mit Flankenwinkel α zur Vertikalen öffnet sich mit
-          dw/dz = 2·tan(α). Der Verstärkungsfaktor ist damit NAHT-SPEZIFISCH:
-
-              α = 45° (90°-Naht) -> Faktor 2.00      <- aktuelles Bauteil
-              α = 30° (60°-Naht) -> Faktor 1.15
-              je spitzer die Naht, desto stärker die Verstärkung
-
-          Für das aktuelle Bauteil gilt also:
-
-              Fehler_Spaltbreite = -2 · dz_Registrierung
-
-          Verifiziert über die synthetischen Fälle (Vergleich gegen dieselbe
-          Methode auf unregistrierten Rohdaten, wo sie exakt ist):
-              translation_y  n=10  Korr 0.99998  Rest-RMS 0.0004 mm
-              translation_z  n= 4  Korr 0.99999  Rest-RMS 0.0077 mm
-              rotation_x     n=10  Korr 0.99970  Rest-RMS 0.0141 mm
-              translation_combo n=5 Korr 0.99978 Rest-RMS 0.0068 mm
-          Bei rotation_x erzeugt das Fehler bis 0.94 mm, obwohl der WAHRE
-          Spalt sich kaum ändert (1.475..1.528) – die Registrierung allein
-          produziert dort die gesamte scheinbare Abweichung.
-
-          rotation_y folgt demselben Mechanismus, aber mit POSITIONSABHÄNGIGEM
-          dz: eine Restrotation der Registrierung um die gap_axis kippt die
-          Auswertungsebene, der Höhenfehler wächst linear entlang der Naht.
-          Mit dz_eff = dz - x̄·sin(ry_reg) statt dz allein:
-              ry=0.10°  Vorhersage +0.174  tatsächlich +0.174
-              ry=0.25°  Vorhersage +0.435  tatsächlich +0.432
-              ry=0.50°  Vorhersage +0.876  tatsächlich +0.849
-          Die Deckflächen-Verankerung unten räumt das mit ab: Deckfläche und
-          Flanken rotieren gemeinsam, eine daran verankerte Auswertungshöhe
-          ist rotationsinvariant.
-
-          AUSNAHME ry >= 1.0°: dort bricht die Registrierung qualitativ ein
-          (dz springt von ~0.000 auf -0.244, ICP-Residuum 0.482 – anderes
-          lokales Minimum). Modell trifft nicht mehr (+1.425 vs +0.355).
-          Dokumentierte Verfahrensgrenze; betrifft auch die Kombis mit
-          ry-Anteil (rotation_combo, translation_rotation_combo).
-
-          Ausgeschlossen als Ursache – gemessen, nicht vermutet: weder
-          Segmentierung noch Flanken-Paarung. Über ry = 0..1.0° bleiben die
-          FlankSegmenter-Kandidatenzahlen stabil (33.545 -> 31.938, -5 %),
-          und alle 20 Naht-Bins sehen durchgehend BEIDE Flanken, kein
-          einziger einseitiger Slice.
-
-          rotation_z liegt mit max 0.064 mm im Rauschen.
-
-        TODO – Auswertungshöhe an der Geometrie verankern:
-          Statt z = 0 die per RANSAC gefittete Deckflächen-Ebene als Bezug
-          nehmen (BackgroundRemover legt plane_model und z_center bereits in
-          den SegmentationReport). Damit fällt dz vollständig heraus.
-
-          ABER – die Abhängigkeit wird damit verlagert, nicht beseitigt:
-          Liegt der Deckflächen-Fit um δ daneben, steht δ an der Stelle von dz
-          und geht mit demselben Faktor 2·tan(α) ein. Die Genauigkeit der
-          Spaltbreite hängt nach dem Fix also an der QUALITÄT DER DECKFLÄCHEN-
-          EBENE – das macht die Robustheit dieses RANSAC-Fits sicherheits-
-          kritisch für die Spaltmessung.
-
-          Der Gewinn ist trotzdem real: die Deckfläche ist dicht besetzt und
-          gut konditioniert, anders als die rx-Rotation, die ICP schlecht
-          auflöst. Bei realen Scans sitzen dort aber Spritzer und Reflexionen –
-          genau die Störungen, gegen die ein RANSAC-Ebenenfit abgesichert
-          werden muss, bevor man sich auf ihn verlässt.
-
-          Schranken – die zweite ERSETZT die erste, sie ergänzt sie nicht:
-            - JETZT (z=0-Methode): für die 0.25-mm-Toleranz aus AP2 muss
-              dz < ~0.12 mm bleiben. Synthetisch erfüllt (dz < 0.04 mm),
-              bei realen Scans offen.
-            - NACH dem Fix: dz fällt heraus, das obige Kriterium wird
-              hinfällig. Maßgeblich ist dann der Fit-Fehler der Deckflächen-
-              Ebene, mit derselben Schranke δ < ~0.12 mm (bei α=45°;
-              bei flacheren Nähten entsprechend lockerer).
-          Solange die z=0-Methode noch irgendwo als Fallback existiert, bleibt
-          der Faktor winkelabhängig und muss bei anderen Öffnungswinkeln
-          (z.B. künftige Heidenbluth-Bauteile) neu bestimmt werden.
-        """
-        if len(pts) < self.min_points_per_bin:
-            return float("nan")
-        z = pts[:, self.vertical_axis]
-        y = pts[:, self.gap_axis]
-        try:
-            _, y0 = np.polyfit(z, y, 1)
-        except (np.linalg.LinAlgError, ValueError):
-            return float("nan")
-        return float(y0)

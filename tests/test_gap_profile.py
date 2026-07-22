@@ -159,19 +159,38 @@ class TestDepthAnchoring:
             f"Erwartet waere -2*dz = {-2*dz:+.3f} mm, wenn die Verankerung fehlt."
         )
 
-    def test_legacy_method_does_depend_on_dz(self, step, v_seam):
-        """Gegenprobe: die alte z=0-Methode zeigt den -2·dz-Effekt.
+    def test_unanchored_measurement_would_depend_on_dz(self, v_seam):
+        """Gegenprobe: eine NICHT verankerte Messung zeigt den -2·dz-Effekt.
 
         Stellt sicher, dass der Invarianztest oben ueberhaupt etwas pruefen
         kann und nicht auf einer Fixture laeuft, bei der dz folgenlos waere.
+
+        Die Referenzmessung ist hier bewusst im Test nachgebaut und nicht aus
+        dem Produktivcode importiert: die alte z=0-Methode wurde entfernt,
+        nachdem die Verankerung validiert war. Ohne diesen lokalen Nachbau
+        haette der Invarianztest seine Absicherung mit verloren.
         """
         pcd, lbl = v_seam
-        base = measure(step, pcd, lbl)["artifacts"]["gap_mean_mm"]
+        pts = np.asarray(pcd.points)
+
+        def gap_at_z0(points, labels):
+            """Alte Methode: Flanken auf vertical_axis = 0 extrapolieren."""
+            out = []
+            for label in (FLANK_A, FLANK_B):
+                sub = points[labels == label]
+                # q(z) = m·z + q0, ausgewertet bei z = 0
+                out.append(np.polyfit(sub[:, 2], sub[:, 1], 1)[1])
+            return abs(out[1] - out[0])
+
         dz = 0.3
-        shifted = o3d.geometry.PointCloud(pcd)
-        shifted.translate((0.0, 0.0, dz))
-        got = measure(step, shifted, lbl)["artifacts"]["gap_mean_mm"]
-        assert got == pytest.approx(base - 2.0 * dz, abs=0.02)
+        base = gap_at_z0(pts, lbl)
+        shifted = gap_at_z0(pts + np.array([0.0, 0.0, dz]), lbl)
+
+        # 45°-Flanken: dw/dz = 2·tan(45°) = 2
+        assert shifted == pytest.approx(base - 2.0 * dz, abs=0.02), (
+            f"Fixture zeigt den -2·dz-Effekt nicht ({base:.3f} -> {shifted:.3f}); "
+            f"der Invarianztest waere damit aussagelos"
+        )
 
     def test_invariant_under_rigid_tilt(self, step, v_seam):
         """Auch gegen eine Starrkörper-Verkippung invariant.

@@ -200,7 +200,7 @@ def figure_cross_section(path: Path):
     ax.set_ylim(-THICK - 1.9, 1.15)
     ax.set_aspect("equal")
     _style(ax, "Y — Spalt-Querrichtung (mm)", "Z (mm)")
-    ax.set_title("Spaltmessung an der Werkstückoberseite im Querschnitt",
+    ax.set_title("Verankerte Spaltmessung im Querschnitt",
                  fontsize=13, pad=14)
     ax.legend(loc="upper left", bbox_to_anchor=(0.01, 0.80),
               fontsize=9, framealpha=0.95)

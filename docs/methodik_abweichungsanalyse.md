@@ -36,8 +36,9 @@ Qualitätsbewertung, Merkmalsextraktion für die RL-Optimierung in AP3.
 **Umsetzungsentscheidungen dieses Projekts** — nicht im Arbeitsplan vorgegeben,
 sondern aus der Bauteilgeometrie und den Messdaten abgeleitet: die
 Achsenkonvention, die Aufteilung in Werkstückoberseite/Flanken/Spaltregion, die
-an der Werkstückoberseite verankerte Spaltmessung, die Beschreibung jeder Flanke durch ein
-eigenes Profil sowie die konkrete Auswahl der Qualitätsmerkmale.
+an der Werkstückoberseite verankerte Spaltmessung, die Beschreibung jeder
+Flanke durch ein eigenes Profil sowie die konkrete Auswahl der
+Qualitätsmerkmale.
 
 ---
 
@@ -145,7 +146,7 @@ und der Grund ist die Nahtgeometrie selbst.
 **Die V-Form der Naht koppelt Spaltbreite und Höhe.** Anhand der Flanken allein
 lässt sich nicht unterscheiden, ob der Spalt breiter ist oder ob das Bauteil
 höher liegt — bei 45°-Flanken ist beides geometrisch dasselbe. Es ist dieselbe
-Kopplung `dw/dz = 2·tan(α)`, die in Abschnitt 5.2 die Messverstärkung
+Kopplung `dw/dd = 2·tan(α)`, die in Abschnitt 5.2 die Messverstärkung
 verursacht.
 
 Ist der Spalt im Scan breiter als im CAD, passen die Flanken folglich besser
@@ -227,10 +228,12 @@ dreistufige Aggregation ist Umsetzungsentscheidung.
 
 ---
 
-## 5. Spaltmessung an der Werkstückoberseite
+## 5. Verankerte Spaltmessung
 
 Dies ist das Kernstück des Verfahrens und die Stelle, an der die meisten
-methodischen Entscheidungen zusammenlaufen.
+methodischen Entscheidungen zusammenlaufen. Der Name benennt das Prinzip:
+Gemessen wird *unterhalb* der Werkstückoberseite, verankert *an* ihr — sie ist
+der Höhenbezug, nicht der Ort der Messung.
 
 ### 5.1 Das Problem einer festen Auswertungshöhe
 
@@ -252,8 +255,10 @@ Flankenwinkel α zur Vertikalen wächst die Spaltbreite pro Tiefeneinheit um
 dw/dd = 2 · tan(α)
 ```
 
-Der Faktor 2 entsteht, weil sich *beide* Flanken öffnen. Ein Höhenfehler geht
-damit vervielfacht in die Spaltbreite ein:
+Dabei bezeichnet `d` die Tiefe unter dem jeweiligen Höhenbezug — zu
+unterscheiden von `dz`, dem Höhenfehler der Registrierung, der weiter unten
+auftritt. Der Faktor 2 entsteht, weil sich *beide* Flanken öffnen. Ein
+Höhenfehler geht damit vervielfacht in die Spaltbreite ein:
 
 | Nahtöffnung | Flankenwinkel α | Verstärkungsfaktor |
 |---|---|---|
@@ -321,8 +326,9 @@ deshalb ausreißerrobust ausgelegt, gibt Gütemaße mit aus und verweigert die
 Auswertung, wenn die Werkstückoberseite zu stark gestört ist — lieber kein Wert
 als ein falscher Bezug.
 
-**Ein systematischer Anteil von δ ist bekannt: die Ebene sitzt minimal zu
-tief.** Als Background zählt alles innerhalb der Toleranzbreite um die Ebene.
+**Ein systematischer Anteil von δ ist bekannt — der Referenzebenen-Versatz.**
+Die Ebene sitzt minimal zu tief. Als Background zählt alles innerhalb der
+Toleranzbreite um die Ebene.
 Am Übergang zur Fase fallen dadurch Flankenpunkte in dieses Band — aber nur
 *unterhalb* der Oberfläche, denn darüber ist nichts. Die Punktverteilung ist
 also einseitig, und weil der Ebenenfit den Mittelwert seiner Inlier trifft,
@@ -340,6 +346,10 @@ demgegenüber symmetrisch und erzeugt keinen Versatz — der Beitrag kommt allei
 aus der Einseitigkeit der Geometrie. Wer ihn beseitigen will, hat zwei Wege:
 das Band für den Ebenenfit enger fassen als für die Klassifikation, oder statt
 des Mittelwerts ein oberes Quantil verwenden.
+
+Dieser Versatz betrifft den **Höhenbezug**. Ein zweiter, davon unabhängiger
+systematischer Anteil entsteht bei der Wahl der **Auswertetiefe** — dazu der
+folgende Abschnitt.
 
 ### 5.4 Zwei getrennte Flankenprofile
 
@@ -362,9 +372,30 @@ Der **Wurzelspalt** wird an der tiefsten Stelle ausgewertet, an der *beide*
 Flanken belegt sind. Das ist bewusst ein Messwert und keine Extrapolation über
 die Daten hinaus: Die tatsächliche Wurzel ist bei durchgehendem Spalt oft nicht
 erfasst, und ein extrapolierter Wert würde eine Genauigkeit vortäuschen, die die
-Messung nicht hergibt. Der Preis ist ein kleiner systematischer Versatz, weil
-die Auswertetiefe knapp oberhalb der echten Wurzel liegt — er ist konstant,
-bekannt und in der Fehleranalyse beziffert.
+Messung nicht hergibt.
+
+Der Preis dafür ist der **Auswertetiefen-Versatz**. Die tiefste beidseitig
+belegte Stelle wird über ein oberes Quantil bestimmt statt über den äußersten
+Messpunkt, der ausreißerempfindlich wäre. Sie liegt damit knapp oberhalb der
+echten Wurzel, und weil sich die Naht nach oben öffnet, fällt der Spalt
+entsprechend zu klein aus: an den synthetischen Scans **−0.019 mm**, konstant
+und ohne Streuung über die gesamte Serie. Das sind rund 8 % der
+0.25-mm-Toleranz. Entscheidend für die Wahl ist weniger der Betrag als seine
+Art: Der Versatz ist bekannt, konstant und über einen Parameter korrigierbar,
+während der Fehler einer Extrapolation davon abhinge, wie weit über die Daten
+hinaus extrapoliert wird — also gerade dort am größten wäre, wo die Wurzel
+schlecht erfasst ist.
+
+Dieser Versatz ist **nicht** derselbe wie der Referenzebenen-Versatz aus
+Abschnitt 5.3. Die beiden greifen an verschiedenen Stellen an:
+
+| | Referenzebenen-Versatz (5.3) | Auswertetiefen-Versatz (5.4) |
+|---|---|---|
+| **verschiebt** | den Höhenbezug | die Auswertetiefe |
+| **Ursache** | einseitige Punktverteilung am Fasenübergang | oberes Quantil statt äußerster Messpunkt |
+| **Betrag** (synthetische Scans) | 0.001 mm | 0.019 mm |
+| **Verstärkung** | ja, mit `2·tan(α)` | nein, wirkt direkt auf die Breite |
+| **Gegenmaßnahme** | engeres Fitband oder oberes Quantil | Quantil höher setzen |
 
 ### 5.5 Abgeleitete Größen
 
@@ -431,24 +462,38 @@ Ausführlich mit Messwerten in
 `fehleranalyse_achsen_und_registrierung.md`; hier nur die konzeptionelle
 Einordnung.
 
-**Systematischer Versatz an der Wurzel.** Die Auswertetiefe liegt knapp oberhalb
-der tatsächlichen Wurzel, wodurch der Spalt geringfügig zu klein gemessen wird.
-Der Versatz ist konstant, ohne Streuung und über einen Parameter justierbar. Er
-wurde bewusst belassen, weil die Alternative — Auswertung am äußersten
-Messpunkt — ausreißerempfindlich wäre.
+**Zwei systematische Versätze mit verschiedenen Ursachen.** Beide sind klein,
+werden aber leicht für denselben gehalten.
+
+*Auswertetiefen-Versatz* (−0.019 mm, Abschnitt 5.4). Die Auswertetiefe liegt
+knapp oberhalb der tatsächlichen Wurzel, wodurch der Spalt geringfügig zu klein
+gemessen wird. Konstant, ohne Streuung und über einen Parameter justierbar.
+Bewusst belassen, weil die Alternative — Auswertung am äußersten Messpunkt —
+ausreißerempfindlich wäre.
+
+*Referenzebenen-Versatz* (0.001 mm, Abschnitt 5.3). Die Referenzebene selbst
+sitzt geringfügig zu tief, weil am Übergang zur Fase nur Punkte *unterhalb* der
+Oberfläche in den Fit fallen. Auf synthetischen Daten vernachlässigbar, bei
+realen Scans aber potenziell größer, da der Übergangsbereich dort mehr Punkte
+stellt. Anders als der erste geht er zudem mit dem Verstärkungsfaktor
+`2·tan(α)` in die Spaltbreite ein.
 
 **Grenze bei starker Querverkippung.** Ab etwa einem Grad Verkippung um die
 Spalt-Querachse findet die Registrierung ein abweichendes Optimum. Auf die
-Spaltmessung wirkt sich das nicht aus — sie ist gegen Starrkörper-Fehlstellungen
-invariant —, wohl aber auf die Distanzbestimmung, die auf eine gute Ausrichtung
-angewiesen ist.
+Spaltmessung wirkt sich das nicht aus, und der Grund ist strukturell: Die
+Registrierung kann auf den Scan ausschließlich eine Starrkörpertransformation
+anwenden. Ein abweichendes Optimum liefert deshalb keinen verzerrten Scan,
+sondern denselben Scan an der falschen Stelle — also genau die Fehlerklasse,
+gegen die die Verankerung invariant ist (nächster Absatz). Die
+Distanzbestimmung trifft es dagegen voll, weil sie Scan und CAD punktweise
+vergleicht und dafür auf eine gute Ausrichtung angewiesen ist.
 
 **Invarianz gilt gegen Starrkörperfehler, nicht gegen Verzerrung.** Diese
 Einschränkung ist wichtig und wird leicht überlesen: Die Verankerung macht die
 Messung unempfindlich gegen Verschiebung und Verdrehung des *gesamten*
 Bauteils. Gegen eine tatsächliche Verformung — ein verzogenes Blech, eine
-gekrümmte Werkstückoberseite — hilft sie nicht. Dort ist die Referenzebene selbst keine
-Ebene mehr, und die Grundannahme des Verfahrens greift nicht.
+gekrümmte Werkstückoberseite — hilft sie nicht. Dort ist die Referenzebene
+selbst keine Ebene mehr, und die Grundannahme des Verfahrens greift nicht.
 
 **Reproduzierbarkeit.** Auf synthetischen Daten liefern wiederholte Auswertungen
 identische Ergebnisse. Ursache ist nicht ein fester Zufallsstartwert, sondern die

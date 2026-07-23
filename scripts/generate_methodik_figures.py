@@ -146,7 +146,7 @@ def figure_cross_section(path: Path):
 
     # Referenzebene (der Anker)
     ax.axhline(0, color=C_REF, linewidth=2.2, zorder=6)
-    ax.text(0, 0.55, "Referenzebene — Oberseite Werkstück A   (d = 0)",
+    ax.text(0, 0.55, "Referenzebene — Werkstückoberseite A   (d = 0)",
             color=C_REF, fontsize=9.5, weight="bold", ha="center")
 
     # Flankenprofile über ihrem Fitband
@@ -230,9 +230,9 @@ def figure_amplification(path: Path):
             z_anchor = z_deck                # Bezug: Oberseite des Bauteils
             z_eval = z_deck - d_nom
             farbe, titel = C_REF, "verankert an der Werkstückoberseite"
-            # Kurzform in den Beschriftungen: der Panel-Titel traegt den
-            # vollen Begriff, ausgeschrieben kollidieren sie mit der Bemassung.
-            anchor_txt = "Bezug:\nOberseite"
+            # Mit Bindestrich umbrochen: ausgeschrieben auf einer Zeile
+            # kollidiert der Begriff mit der Bemassung.
+            anchor_txt = "Bezug:\nWerkstück-\noberseite"
             mess_txt = "= Wurzelspalt"
             note = ("Bezug wandert mit dem Bauteil\n"
                     "→ Schnitt trifft die Wurzel, Spalt korrekt")
@@ -256,7 +256,9 @@ def figure_amplification(path: Path):
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=1.8))
         # Die Auswertetiefe entspricht der Blechdicke: die Wurzel liegt genau
         # eine Blechdicke unter der Werkstückoberseite.
-        z_mid = (z_anchor + z_eval) / 2
+        # Nicht mittig, sondern etwas tiefer: sonst stoesst die dreizeilige
+        # Ankerbeschriftung von oben an die Massangabe.
+        z_mid = z_anchor - 0.62 * (z_anchor - z_eval)
         ax.text(x_depth + 0.5, z_mid + 0.1, f"{d_nom:.1f} mm",
                 color=farbe, fontsize=10, va="bottom", weight="bold")
         ax.text(x_depth + 0.5, z_mid - 0.1, "= Blechdicke",
@@ -299,7 +301,7 @@ def figure_amplification(path: Path):
                           edgecolor=farbe, alpha=0.95))
         ax.set_title(titel, fontsize=12, color=farbe, weight="bold", pad=8)
         ax.set_xlim(-9.8, 11.0)
-        ax.set_ylim(-THICK - 3.4, 1.5)
+        ax.set_ylim(-THICK - 3.4, 2.5)
         ax.set_aspect("equal")
         _style(ax, "Y — Spalt-Querrichtung (mm)", "")
 
@@ -310,10 +312,10 @@ def figure_amplification(path: Path):
     # Beide Beschriftungen direkt an ihrer Linie – frei schwebend liessen
     # sie sich nicht zuordnen. Zweizeilig, weil ein breiter Text sonst in
     # Flanke A hineinlaeuft. Der Zahlenwert steht an der dz-Bemassung.
-    axes[0].text(-9.6, 0.15, "Soll-Höhe der\nOberseite",
+    axes[0].text(-9.6, 0.15, "Soll-Höhe der\nWerkstück-\noberseite",
                  color=C_SOLL, fontsize=8.5, weight="bold", va="bottom",
                  linespacing=1.4)
-    axes[0].text(-9.6, -0.8, "gemessene\nOberseite",
+    axes[0].text(-9.6, -0.8, "gemessene\nWerkstück-\noberseite",
                  color=C_REF, fontsize=8.5, weight="bold", va="top",
                  linespacing=1.4)
     fig.suptitle(

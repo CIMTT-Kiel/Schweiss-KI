@@ -264,7 +264,7 @@ def figure_amplification(path: Path):
         # Pfeile von AUSSEN nach innen, wie in der technischen Zeichnung bei
         # kleinen Maßen üblich: zwischen 0.6 mm passen zwei Pfeilspitzen nicht,
         # sie verschmelzen sonst zu einem Klecks.
-        x_dz = -3.4
+        x_dz = -3.2
         for z_ziel, z_start in ((0.0, 0.85), (z_deck, z_deck - 0.85)):
             ax.annotate("", xy=(x_dz, z_ziel), xytext=(x_dz, z_start),
                         arrowprops=dict(arrowstyle="->", color=C_SOLL, lw=1.4))
@@ -305,11 +305,13 @@ def figure_amplification(path: Path):
     draw(axes[1], anchored=True)
     axes[0].set_ylabel("Z (mm)")
     # Nur im linken Panel beschriften – rechts ist die Lage dieselbe.
-    axes[0].text(-9.6, 0.45, "Soll-Höhe der Deckfläche",
-                 color=C_SOLL, fontsize=9, weight="bold")
-    # Schmal gesetzt: breiter Text würde in Flanke A hineinlaufen. Der
-    # Zahlenwert steht jetzt an der dz-Bemaßung, hier nur noch der Name.
-    axes[0].text(-9.6, -1.5, "gemessene\nDeckfläche",
+    # Beide Beschriftungen direkt an ihrer Linie – frei schwebend liessen
+    # sie sich nicht zuordnen. Zweizeilig, weil ein breiter Text sonst in
+    # Flanke A hineinlaeuft. Der Zahlenwert steht an der dz-Bemassung.
+    axes[0].text(-9.6, 0.15, "Soll-Höhe der\nDeckfläche",
+                 color=C_SOLL, fontsize=8.5, weight="bold", va="bottom",
+                 linespacing=1.4)
+    axes[0].text(-9.6, -0.8, "gemessene\nDeckfläche",
                  color=C_REF, fontsize=8.5, weight="bold", va="top",
                  linespacing=1.4)
     fig.suptitle(

@@ -34,6 +34,7 @@ C_REF = "#37474F"
 C_GUIDE = "#B0BEC5"
 C_BODY = "#CFD8DC"
 C_BAD = "#E53935"
+C_SOLL = "#546E7A"   # Soll-Höhe: dunkler als eine Hilfslinie, s.u.
 
 # Nahtgeometrie (schematisch) – Wurzelspalt und Blechdicke wie beim
 # Referenzbauteil Baugruppe_Beispielteil_V-Naht_1.5mm_Spalt.
@@ -214,8 +215,11 @@ def figure_amplification(path: Path):
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 5.0), dpi=DPI, sharey=True)
 
     def draw(ax, anchored):
-        # Soll-Höhe der Deckfläche (wo das Bauteil liegen sollte)
-        ax.axhline(0, color=C_GUIDE, linestyle=":", linewidth=1.3, zorder=2)
+        # Soll-Höhe der Deckfläche (wo das Bauteil liegen sollte).
+        # Kräftiger als eine reine Hilfslinie: sie ist im linken Panel der
+        # Bezugspunkt und muss auch projiziert erkennbar bleiben.
+        ax.axhline(0, color=C_SOLL, linestyle=(0, (6, 3)), linewidth=1.7,
+                   zorder=2)
         # Tatsächlich gemessene Deckfläche
         ax.axhline(z_deck, color=C_REF, linewidth=2.2, zorder=6)
         for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
@@ -250,15 +254,21 @@ def figure_amplification(path: Path):
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=1.8))
         ax.text(x_depth + 0.5, (z_anchor + z_eval) / 2, f"{d_nom:.1f} mm",
                 color=farbe, fontsize=10, va="center", weight="bold")
-        ax.text(x_depth + 0.5, z_anchor + 0.15, anchor_txt,
-                color=farbe, fontsize=8.5, va="bottom")
+        # Bei der Deckflächen-Verankerung nach unten setzen: nach oben läge
+        # der Text auf der Soll-Höhen-Linie.
+        ax.text(x_depth + 0.5,
+                z_anchor - 0.2 if anchored else z_anchor + 0.15, anchor_txt,
+                color=farbe, fontsize=8.5,
+                va="top" if anchored else "bottom")
 
         # Auswertungshöhe und gemessene Spaltbreite
         ax.axhline(z_eval, color=farbe, linestyle="--", linewidth=1.8, zorder=7)
         ax.annotate("", xy=(half, z_eval), xytext=(-half, z_eval),
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=2.2))
-        ax.text(half + 0.55, z_eval, f"{2 * half:.1f} mm\n{mess_txt}", color=farbe,
-                fontsize=10.5, ha="left", va="center", weight="bold",
+        # Nach LINKS gesetzt: rechts liegt die Tiefenbemaßung, deren
+        # Pfeilspitze sonst von der weißen Hinterlegung verdeckt wird.
+        ax.text(-half - 0.7, z_eval, f"{2 * half:.1f} mm\n{mess_txt}", color=farbe,
+                fontsize=10.5, ha="right", va="center", weight="bold",
                 bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
                           edgecolor="none", alpha=0.9))
 
@@ -277,7 +287,7 @@ def figure_amplification(path: Path):
     axes[0].set_ylabel("Z (mm)")
     # Nur im linken Panel beschriften – rechts ist die Lage dieselbe.
     axes[0].text(-9.6, 0.45, "Soll-Höhe der Deckfläche",
-                 color="#8A9AA5", fontsize=8.5)
+                 color=C_SOLL, fontsize=9, weight="bold")
     # Schmal gesetzt: breiter Text würde in Flanke A hineinlaufen.
     axes[0].text(-9.6, -1.5, f"gemessene\nDeckfläche\n({dz} mm zu tief)",
                  color=C_REF, fontsize=8.5, weight="bold", va="top",

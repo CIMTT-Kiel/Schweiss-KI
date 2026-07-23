@@ -252,8 +252,27 @@ def figure_amplification(path: Path):
                 color=farbe, linewidth=2.0, zorder=9)
         ax.annotate("", xy=(x_depth, z_eval), xytext=(x_depth, z_anchor),
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=1.8))
-        ax.text(x_depth + 0.5, (z_anchor + z_eval) / 2, f"{d_nom:.1f} mm",
-                color=farbe, fontsize=10, va="center", weight="bold")
+        # Die Auswertetiefe entspricht der Blechdicke: die Wurzel liegt genau
+        # eine Blechdicke unter der Deckfläche.
+        z_mid = (z_anchor + z_eval) / 2
+        ax.text(x_depth + 0.5, z_mid + 0.1, f"{d_nom:.1f} mm",
+                color=farbe, fontsize=10, va="bottom", weight="bold")
+        ax.text(x_depth + 0.5, z_mid - 0.1, "= Blechdicke",
+                color=farbe, fontsize=8.5, va="top")
+
+        # dz-Bemaßung zwischen Soll-Höhe und gemessener Deckfläche.
+        # Pfeile von AUSSEN nach innen, wie in der technischen Zeichnung bei
+        # kleinen Maßen üblich: zwischen 0.6 mm passen zwei Pfeilspitzen nicht,
+        # sie verschmelzen sonst zu einem Klecks.
+        x_dz = -3.4
+        for z_ziel, z_start in ((0.0, 0.85), (z_deck, z_deck - 0.85)):
+            ax.annotate("", xy=(x_dz, z_ziel), xytext=(x_dz, z_start),
+                        arrowprops=dict(arrowstyle="->", color=C_SOLL, lw=1.4))
+        ax.text(x_dz + 0.3, z_deck / 2, f"dz = {dz} mm",
+                color=C_SOLL, fontsize=9, ha="left", va="center",
+                weight="bold",
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                          edgecolor="none", alpha=0.92))
         # Bei der Deckflächen-Verankerung nach unten setzen: nach oben läge
         # der Text auf der Soll-Höhen-Linie.
         ax.text(x_depth + 0.5,
@@ -288,8 +307,9 @@ def figure_amplification(path: Path):
     # Nur im linken Panel beschriften – rechts ist die Lage dieselbe.
     axes[0].text(-9.6, 0.45, "Soll-Höhe der Deckfläche",
                  color=C_SOLL, fontsize=9, weight="bold")
-    # Schmal gesetzt: breiter Text würde in Flanke A hineinlaufen.
-    axes[0].text(-9.6, -1.5, f"gemessene\nDeckfläche\n({dz} mm zu tief)",
+    # Schmal gesetzt: breiter Text würde in Flanke A hineinlaufen. Der
+    # Zahlenwert steht jetzt an der dz-Bemaßung, hier nur noch der Name.
+    axes[0].text(-9.6, -1.5, "gemessene\nDeckfläche",
                  color=C_REF, fontsize=8.5, weight="bold", va="top",
                  linespacing=1.4)
     fig.suptitle(

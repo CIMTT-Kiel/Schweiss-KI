@@ -67,7 +67,7 @@ def figure_axes_convention(path: Path):
     """
     fig, (ax_top, ax_cs) = plt.subplots(
         1, 2, figsize=(11, 4.4), dpi=DPI,
-        gridspec_kw={"width_ratios": [1.5, 1.0]})
+        gridspec_kw={"width_ratios": [1.15, 1.0]})
 
     # ── Draufsicht XY ────────────────────────────────────────────────
     for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
@@ -102,17 +102,25 @@ def figure_axes_convention(path: Path):
                    [-THICK, 0, 0, -THICK],
                    color=C_BODY, alpha=0.6, linewidth=0)
         ax_cs.plot([y_root, y_top], [-THICK, 0], color=c, linewidth=3.0)
-    ax_cs.annotate("", xy=(-ROOT_GAP / 2, -THICK - 0.45),
-                   xytext=(ROOT_GAP / 2, -THICK - 0.45),
-                   arrowprops=dict(arrowstyle="<->", color=C_REF, lw=1.6))
-    ax_cs.text(0, -THICK - 1.5, "Wurzelspalt", color=C_REF, fontsize=9,
-               ha="center", weight="bold")
+    # Wurzelspalt bemassen. Masshilfslinien von den Flankenenden herunter,
+    # sonst schwebt die Bemassung unter dem Bauteil und laesst sich nicht
+    # zuordnen. Die Pfeile zeigen von aussen nach innen, weil zwischen
+    # 1.5 mm zwei Spitzen gedraengt wirken.
+    z_dim = -THICK - 0.7
+    for sign in (-1, +1):
+        ax_cs.plot([sign * ROOT_GAP / 2] * 2, [-THICK, z_dim - 0.15],
+                   color=C_GUIDE, linewidth=0.9, zorder=2)
+        ax_cs.annotate(
+            "", xy=(sign * ROOT_GAP / 2, z_dim), xytext=(sign * 2.6, z_dim),
+            arrowprops=dict(arrowstyle="->", color=C_REF, lw=1.4))
+    ax_cs.text(0, z_dim - 0.55, "Wurzelspalt", color=C_REF, fontsize=9,
+               ha="center", va="top", weight="bold")
     ax_cs.text(-TOP_EDGE - 0.3, -THICK * 0.45, "Flanke A", color=C_FLANK_A,
                fontsize=10, ha="right", weight="bold")
     ax_cs.text(TOP_EDGE + 0.3, -THICK * 0.45, "Flanke B", color=C_FLANK_B,
                fontsize=10, ha="left", weight="bold")
     ax_cs.set_xlim(-x_lim, x_lim)
-    ax_cs.set_ylim(-THICK - 2.0, 1.0)
+    ax_cs.set_ylim(-THICK - 1.9, 0.9)
     ax_cs.set_aspect("equal")
     _style(ax_cs, "Y — Spalt-Querrichtung (mm)", "Z — Tiefe (mm)")
     ax_cs.set_title("Querschnitt (YZ)", fontsize=12)

@@ -142,14 +142,15 @@ und der Grund ist die Nahtgeometrie selbst.
 
 ### Warum die Ausrichtung nicht eindeutig ist
 
-**Ein V koppelt Spaltbreite und Höhe.** Anhand der Flanken allein lässt sich
-nicht unterscheiden, ob der Spalt breiter ist oder ob das Bauteil höher liegt —
-bei 45°-Flanken ist beides geometrisch dasselbe. Es ist dieselbe Kopplung
-`dw/dz = 2·tan(α)`, die in Abschnitt 5.2 die Messverstärkung verursacht.
+**Die V-Form der Naht koppelt Spaltbreite und Höhe.** Anhand der Flanken allein
+lässt sich nicht unterscheiden, ob der Spalt breiter ist oder ob das Bauteil
+höher liegt — bei 45°-Flanken ist beides geometrisch dasselbe. Es ist dieselbe
+Kopplung `dw/dz = 2·tan(α)`, die in Abschnitt 5.2 die Messverstärkung
+verursacht.
 
 Ist der Spalt im Scan breiter als im CAD, passen die Flanken folglich besser
-zusammen, wenn die Ausrichtung den Scan **anhebt** — dort ist das CAD-V weiter.
-Die Flanken drängen also auf einen Höhenversatz.
+zusammen, wenn die Ausrichtung den Scan **anhebt** — dort ist die CAD-Naht
+weiter geöffnet. Die Flanken drängen also auf einen Höhenversatz.
 
 **Dagegen hält die Werkstückoberseite.** Sie ist horizontal, legt die Höhe
 unmittelbar fest und stellt die große Mehrheit der Punkte — beim Referenzbauteil

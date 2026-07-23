@@ -97,8 +97,9 @@ def figure_axes_convention(path: Path):
     x_lim = 10.5
     for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
         y_top, y_out, y_root = sign * TOP_EDGE, sign * x_lim, sign * ROOT_GAP / 2
-        ax_cs.fill([y_root, y_top, y_out, y_out, y_root],
-                   [-THICK, 0, 0, -THICK - 0.8, -THICK - 0.8],
+        # Kein Wurzelsteg: das Blech schliesst mit dem Wurzelspalt ab.
+        ax_cs.fill([y_root, y_top, y_out, y_out],
+                   [-THICK, 0, 0, -THICK],
                    color=C_BODY, alpha=0.6, linewidth=0)
         ax_cs.plot([y_root, y_top], [-THICK, 0], color=c, linewidth=3.0)
     ax_cs.annotate("", xy=(-ROOT_GAP / 2, -THICK - 0.45),
@@ -140,8 +141,11 @@ def figure_cross_section(path: Path):
     for sign in (-1, +1):
         y_top, y_out = sign * TOP_EDGE, sign * x_lim
         y_root = sign * ROOT_GAP / 2
-        ax.fill([y_root, y_top, y_out, y_out, y_root],
-                [-THICK, 0, 0, -THICK - 0.8, -THICK - 0.8],
+        # Das Blech schliesst mit dem Wurzelspalt ab – kein Wurzelsteg. Im
+        # CAD waechst die Spaltbreite als 1.5 + 2*z, die Flanken laufen also
+        # bis zur Unterseite durch.
+        ax.fill([y_root, y_top, y_out, y_out],
+                [-THICK, 0, 0, -THICK],
                 color=C_BODY, alpha=0.6, zorder=1, linewidth=0)
 
     # Referenzebene (der Anker)

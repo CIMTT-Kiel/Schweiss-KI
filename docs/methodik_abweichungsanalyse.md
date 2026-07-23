@@ -114,10 +114,34 @@ nieder — die Fit-Güte fällt dort ab und wird als eigenes Merkmal ausgegeben
 Der Scan muss in das CAD-Koordinatensystem überführt werden, ohne dabei die
 Abweichung wegzuoptimieren, die gerade gemessen werden soll.
 
-**Ausrichtung je Werkstück getrennt.** Die beiden Werkstücke werden unabhängig
-voneinander gegen das CAD registriert. Ihre relative Lage zueinander *ist* die
-gesuchte Größe — würde man beide gemeinsam ausrichten, verteilte die
-Registrierung die Fehlstellung auf beide Teile und machte sie unsichtbar.
+### Zwei Registrierungen mit verschiedenen Aufgaben
+
+Das ist die Stelle, an der leicht ein falsches Bild entsteht, deshalb ausdrücklich
+getrennt:
+
+| | was bewegt wird | Zweck |
+|---|---|---|
+| **Ausrichtung** | der **gesamte Scan** als ein Starrkörper | erzeugt die Punktwolke, auf der alles Weitere gemessen wird |
+| **Komponenten-Vermessung** | jedes Werkstück für sich | ermittelt **nur** die Relativlage; die dabei bewegten Wolken werden verworfen |
+
+**Die Ausrichtung bewegt beide Werkstücke gemeinsam.** Kein Teil wird
+festgehalten, während das andere wandert — der Scan wird als Ganzes ins
+CAD-System gedreht und verschoben. Alles, was danach gemessen wird, geschieht
+auf dieser einen ausgerichteten Wolke.
+
+**Die Relativlage wird gemessen, nicht hergestellt.** Für den Kennwert
+„Kantenversatz und Verkippung" wird jedes Werkstück *rechnerisch* einzeln gegen
+das CAD ausgerichtet und aus beiden Transformationen die Lage zueinander
+bestimmt. Die so verschobenen Wolken werden verworfen — würde man sie behalten,
+verschwände genau die Fehlstellung, die den Messwert ausmacht.
+
+**Folge für die Spaltmessung.** Weil die Ausrichtung den gesamten Scan bewegt,
+schlägt ein Höhenanteil ihrer Transformation auf alles durch, was gegen eine
+feste Höhe im Koordinatensystem gemessen wird. Genau daher rührt der Versatz
+`dz` in Abschnitt 5.2. Der Wert entsteht, weil ICP den Gesamtfehler über alle
+Punkte minimiert und dieses Optimum bei einem kleinen Höhenversatz liegen kann —
+Scan und CAD-Referenz haben unterschiedliche Punktdichten, der Scan erfasst
+zudem nur die von oben sichtbare Seite.
 
 **Nur ICP, keine PCA-Grobausrichtung.** Eine Hauptachsentransformation als
 Vorstufe ist der übliche Weg, scheitert hier aber an der Bauteilgeometrie: Das
@@ -233,6 +257,13 @@ Damit fällt der Registrierungsversatz strukturell heraus. Verschiebt sich der
 Scan, verschiebt sich die Referenzebene mit — die Tiefe im Bauteil bleibt
 dieselbe. Die Messung ist gegen **Starrkörper-Fehlstellungen invariant**,
 gleichgültig wie groß sie sind.
+
+Das leistet dasselbe, was ein Festhalten des Referenz-Werkstücks bei der
+Ausrichtung leisten würde — nur ohne die Ausrichtung einzuschränken. Wo die
+Registrierung das Bauteil hinlegt, ist für den Spalt gleichgültig, weil der
+Höhenbezug aus dem Bauteil selbst kommt und nicht aus dem Koordinatensystem.
+Die Ausrichtung bleibt damit frei, den Gesamtfehler gegen das CAD zu
+minimieren — was sie für die Distanzbestimmung (Abschnitt 4) auch soll.
 
 **Zwei getrennte Ebenen, nicht eine gemeinsame.** Die Werkstückoberseite wird je
 Werkstück eigenständig bestimmt. Dafür gibt es zwei unabhängige Gründe:

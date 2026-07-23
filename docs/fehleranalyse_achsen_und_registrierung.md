@@ -215,11 +215,12 @@ tragend. Abgesichert durch `tests/test_reproducibility.py`, dessen Gegenprobe
 explizit den alten Ein-Ebenen-Fit prüft und damit belegt, dass die Mehrdeutigkeit
 die Ursache war.
 
-**Lehre für die Diagnose:** Von „zwei Läufe, andere Zahlen" wurde direkt auf die
-naheliegende Erklärung geschlossen (RANSAC ist zufällig → Seed fehlt), statt zu
-prüfen, ob die Ursache eine Modellierungsebene höher liegt. Fünf Messrunden für
-einen Effekt bei 5 % der Toleranz; der später ohnehin geplante Aufräum-Commit
-löste ihn nebenbei.
+**Lehre für die Diagnose:** Von der Beobachtung „zwei Läufe, abweichende Zahlen"
+wurde unmittelbar auf die naheliegende Erklärung geschlossen — RANSAC arbeitet
+mit Zufallsstichproben, also fehle ein fester Startwert. Nicht geprüft wurde,
+ob die Ursache eine Modellierungsebene höher liegt. Der Aufwand betrug fünf
+Messreihen für einen Effekt in der Größenordnung von 5 % der Toleranz; behoben
+wurde er schließlich als Nebeneffekt einer ohnehin vorgesehenen Überarbeitung.
 
 ---
 
@@ -230,8 +231,8 @@ löste ihn nebenbei.
 > für andere Öffnungswinkel und für die realen Scans relevant bleibt; die
 > verbleibende Abhängigkeit steht in 5.4.
 
-Nach allen obigen Fixes blieb eine Untererfassung von ~3.6 %. Zwei
-Fehlzuordnungen meinerseits, beide später korrigiert:
+Nach allen obigen Fixes blieb eine Untererfassung von ~3.6 %. Zwei Ursachen
+wurden zunächst falsch zugeordnet und später korrigiert:
 
 - **nicht** die Extrapolationsmethode — `_extrapolate_to_z0` ist ein
   Least-Squares-Fit über alle Flankenpunkte und liefert auf unregistrierten

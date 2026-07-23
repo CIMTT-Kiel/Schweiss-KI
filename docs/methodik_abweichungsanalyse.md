@@ -374,17 +374,46 @@ die Daten hinaus: Die tatsächliche Wurzel ist bei durchgehendem Spalt oft nicht
 erfasst, und ein extrapolierter Wert würde eine Genauigkeit vortäuschen, die die
 Messung nicht hergibt.
 
-Der Preis dafür ist der **Auswertetiefen-Versatz**. Die tiefste beidseitig
-belegte Stelle wird über ein oberes Quantil bestimmt statt über den äußersten
-Messpunkt, der ausreißerempfindlich wäre. Sie liegt damit knapp oberhalb der
-echten Wurzel, und weil sich die Naht nach oben öffnet, fällt der Spalt
-entsprechend zu klein aus: an den synthetischen Scans **−0.019 mm**, konstant
-und ohne Streuung über die gesamte Serie. Das sind rund 8 % der
-0.25-mm-Toleranz. Entscheidend für die Wahl ist weniger der Betrag als seine
-Art: Der Versatz ist bekannt, konstant und über einen Parameter korrigierbar,
-während der Fehler einer Extrapolation davon abhinge, wie weit über die Daten
-hinaus extrapoliert wird — also gerade dort am größten wäre, wo die Wurzel
-schlecht erfasst ist.
+Der Preis dafür ist der **Auswertetiefen-Versatz**: Der ausgegebene Wert ist
+die Spaltbreite auf der Tiefe `d_root`, und diese liegt oberhalb der
+tatsächlichen Wurzel. Weil sich die Naht nach oben öffnet, ist die dort
+gemessene Breite **größer** als der Wurzelspalt am Nennmaß — um genau den
+Betrag, den die Kopplung aus Abschnitt 5.2 vorgibt:
+
+```
+Δw = (d_wurzel − d_root) · 2·tan(α)
+```
+
+An den synthetischen Scans beträgt das Tiefendefizit im günstigsten Fall
+0.245 mm, was bei 45°-Flanken auf **+0.49 mm** Breite führt. Es ist damit weder
+klein noch vernachlässigbar: Der ausgegebene Wurzelspalt ist rund das
+Doppelte der Toleranz von der Nennbreite entfernt, ohne dass ein Messfehler
+vorläge.
+
+**Der Versatz ist auch nicht konstant.** Über die 61 Fälle reicht das
+Tiefendefizit von 0.244 mm bis 2.589 mm, der Breiteneffekt entsprechend von
+0.49 mm bis 5.18 mm. Wie tief beide Flanken gemeinsam belegt sind, hängt von
+der Fehlstellung ab — bei verkippten oder angehobenen Werkstücken endet die
+gemeinsame Überdeckung deutlich höher.
+
+Daraus folgt die eigentliche Konsequenz für die Weiterverarbeitung: **Die
+Spaltbreite ist ohne die zugehörige Tiefe `d_root` nicht interpretierbar.**
+Beide werden deshalb gemeinsam ausgegeben. Ein Vergleich gegen das Nennmaß
+oder zwischen zwei Bauteilen muss die Tiefe mitführen; ein direkter Vergleich
+des Zahlenwerts mit 1.5 mm wäre um den obigen Betrag falsch.
+
+Wird die Tiefe korrekt mitgeführt, verbleibt ein **Restversatz von
+−0.0093 mm** — die Messung fällt an der ausgewerteten Tiefe geringfügig
+schmaler aus als die Geometrie vorgibt. Dieser Rest ist über die
+Translationsserie auf vier Nachkommastellen konstant (Streuung 0.0001 mm) und
+liegt bei rund 4 % der Toleranz.
+
+Entscheidend für die Wahl gegen die Extrapolation ist die Art der beiden
+Fehler: Das Tiefendefizit ist gemessen und wird mit ausgegeben, ist also
+bekannt und herausrechenbar. Der Fehler einer Extrapolation hinge dagegen
+davon ab, wie weit über die Daten hinaus extrapoliert wird — er wäre gerade
+dort am größten, wo die Wurzel schlecht erfasst ist, und anders als das
+Tiefendefizit nicht aus den Daten ablesbar.
 
 Dieser Versatz ist **nicht** derselbe wie der Referenzebenen-Versatz aus
 Abschnitt 5.3. Die beiden greifen an verschiedenen Stellen an:
@@ -392,10 +421,12 @@ Abschnitt 5.3. Die beiden greifen an verschiedenen Stellen an:
 | | Referenzebenen-Versatz (5.3) | Auswertetiefen-Versatz (5.4) |
 |---|---|---|
 | **verschiebt** | den Höhenbezug | die Auswertetiefe |
-| **Ursache** | einseitige Punktverteilung am Fasenübergang | oberes Quantil statt äußerster Messpunkt |
-| **Betrag** (synthetische Scans) | 0.001 mm | 0.019 mm |
-| **Verstärkung** | ja, mit `2·tan(α)` | nein, wirkt direkt auf die Breite |
-| **Gegenmaßnahme** | engeres Fitband oder oberes Quantil | Quantil höher setzen |
+| **Ursache** | einseitige Punktverteilung am Fasenübergang | gemeinsame Flankenüberdeckung endet oberhalb der Wurzel |
+| **Betrag** (synthetische Scans) | 0.001 mm | 0.49 … 5.18 mm, je nach Fehlstellung |
+| **konstant?** | ja | nein, hängt von der Fehlstellung ab |
+| **Verstärkung** | ja, mit `2·tan(α)` | die Kopplung `2·tan(α)` *erzeugt* ihn |
+| **Gegenmaßnahme** | engeres Fitband oder oberes Quantil | `d_root` mitführen und herausrechnen |
+| **Restfehler danach** | — | −0.0093 mm, konstant |
 
 ### 5.5 Abgeleitete Größen
 
@@ -404,16 +435,58 @@ Spaltbreite hinausgehen:
 
 | Größe | Aussage |
 |---|---|
-| **Flankenwinkel je Seite** | tatsächliche Nahtvorbereitung |
+| **Flankenwinkel je Seite** | tatsächliche Nahtvorbereitung — *mit Vorbehalt, s.u.* |
+| **Winkelsumme** `(α_A−45°)+(α_B−45°)` | Querverkippung, registrierungsinvariant |
 | **Flankenasymmetrie** | Differenz beider Winkel |
 | **Kantenversatz** | Höhenversatz der Werkstücke zueinander |
 | **relative Verkippung** | Winkel zwischen den Werkstückoberseiten |
 | **Fit-Güte je Flanke** | Profilstörungen, etwa durch Heftnähte |
 
-Bemerkenswert ist der erste Punkt: Der Flankenwinkel wird **gemessen, nicht
-vorausgesetzt**. Ein Verfahren, das den Sollwinkel als bekannt annimmt, kann
-eine fehlerhafte Nahtvorbereitung nicht erkennen — die Abweichung vom Soll ist
-selbst ein Qualitätsmerkmal.
+Der Flankenwinkel wird **gemessen, nicht vorausgesetzt**. Ein Verfahren, das
+den Sollwinkel als bekannt annimmt, kann eine fehlerhafte Nahtvorbereitung
+nicht erkennen — die Abweichung vom Soll ist selbst ein Qualitätsmerkmal.
+
+**Die einzelnen Winkel sind dafür aber nicht unmittelbar brauchbar.** In der
+synthetischen Serie wurde jeweils nur *ein* Werkstück verkippt. Erwartbar wäre
+daher, dass sich auch nur dessen Flankenwinkel ändert. Gemessen wandern beide:
+über die Serie mit aufgeprägter Querverkippung `rx` folgt Flanke A mit
+Steigung 0.7499, Flanke B mit 0.2501 (Korrelation jeweils 0.9999). Die
+Ausrichtung verteilt die Verkippung auf beide Werkstücke, und wie sie das tut,
+schlägt unmittelbar auf die Einzelwinkel durch. Ein Einzelwinkel beschreibt
+damit nicht das Bauteil, sondern zu einem erheblichen Teil das Ergebnis der
+Registrierung.
+
+**Ihre Summe ist es dagegen.** Die beiden Steigungen ergänzen sich zu 1.0, und
+das ist keine Zufälligkeit der Zahlen: Was die Ausrichtung der einen Flanke
+nimmt, gibt sie der anderen. Die Summe
+
+```
+(α_A − 45°) + (α_B − 45°) = rx
+```
+
+trifft die aufgeprägte Verkippung über 22 Fälle mit Steigung 0.99978 und einem
+maximalen Rest von 0.035°. In den Merkmalsvektor gehört deshalb die Summe, und
+die Einzelwinkel allenfalls als nachgeordnete Diagnosegrösse.
+
+**Daraus lässt sich ein allgemeines Prüfkriterium ableiten.** Es ist dieselbe
+Eigenschaft, die die Verankerung dem Spalt verschafft (Abschnitt 5.3): Eine
+Größe taugt nur dann als Bauteilmerkmal, wenn sie nicht davon abhängt, wie
+die Ausrichtung einen Fehler auf die Werkstücke verteilt. Ist diese
+Abhängigkeit vorhanden, misst die Größe ein Artefakt des Verfahrens und nicht
+das Bauteil. Für jedes weitere Merkmal ist das zu prüfen, bevor es in den
+Vektor aufgenommen wird — der Prüfweg ist derselbe wie hier: eine Serie mit
+bekannter, einseitig aufgeprägter Abweichung und die Frage, ob der Kennwert
+ihr folgt oder sich auf beide Seiten verteilt.
+
+**Vorbehalt.** Die synthetischen Fälle enthalten ausschließlich
+Starrkörper-Verstellungen — verschobene und verkippte, aber in sich
+unveränderte Werkstücke. Eine *tatsächlich* abweichende Flankengeometrie, wie
+sie eine fehlerhafte Nahtvorbereitung erzeugen würde, kommt darin nicht vor.
+Ob die Einzelwinkel in diesem Fall ein legitimes Merkmal wären, ist damit
+nicht geprüft: Ein einseitig verändertes Flankenprofil ist keine
+Starrkörper-Fehlstellung, und die obige Aufteilung muss dort nicht gelten. Der
+Test wäre ein synthetischer Fall mit einseitig veränderter Flankengeometrie;
+er steht aus.
 
 *Umsetzung grob:* `src/schweiss_ki/subtraction/deviation/`, visuelle Kontrolle
 über die Querschnittsdarstellung in `src/schweiss_ki/subtraction/plots.py`
@@ -438,8 +511,9 @@ Daran orientiert sich die Merkmalsauswahl:
 
 | Merkmal | Was es abbildet |
 |---|---|
-| **Spaltbreite entlang der Naht** | die Fehlplatzierung direkt — zu weit, zu eng, keilförmig |
+| **Spaltbreite entlang der Naht**, mit `d_root` | die Fehlplatzierung direkt — zu weit, zu eng, keilförmig |
 | **Kantenversatz** | Höhenversatz der Bauteile, den die Spaltbreite nicht sieht |
+| **Winkelsumme** `(α_A−45°)+(α_B−45°)` | Querverkippung der Bauteile zueinander |
 | **Flankenasymmetrie** | einseitige Fehlstellung oder abweichende Nahtvorbereitung |
 | **Fit-Güte** | lokale Störungen wie überstehende Heftnähte |
 | **Abweichungsverteilung** | global, je Region und räumlich aufgelöst |
@@ -450,8 +524,23 @@ kurz. Zwei Bauteile können denselben Spalt bei völlig verschiedener Lage haben
 fangen genau die Fehlerbilder, die eine reine Spaltangabe nicht unterscheiden
 kann.
 
-Alle Größen liegen als Skalare beziehungsweise als Verlauf entlang der Naht vor
-und sind damit direkt als Merkmalsvektor verwendbar. Die
+Zwei Einschränkungen sind bei der Zusammenstellung zu beachten, beide aus
+Abschnitt 5 hergeleitet:
+
+*Die Spaltbreite ist nur zusammen mit `d_root` aussagekräftig* (Abschnitt 5.4).
+Der Zahlenwert allein ist zwischen Bauteilen nicht vergleichbar, weil die
+Auswertetiefe von der Fehlstellung abhängt. Entweder wird die Tiefe als
+zweite Komponente mitgeführt, oder die Breite wird vorab auf eine einheitliche
+Bezugstiefe umgerechnet.
+
+*Die einzelnen Flankenwinkel gehören nicht in den Vektor* (Abschnitt 5.5). Sie
+hängen davon ab, wie die Ausrichtung eine Verkippung auf die beiden Werkstücke
+verteilt, und beschreiben insoweit das Verfahren statt des Bauteils. An ihrer
+Stelle steht die Winkelsumme, die gegen diese Aufteilung invariant ist. Für
+jedes künftige Merkmal ist dieselbe Prüfung vorzunehmen.
+
+Die übrigen Größen liegen als Skalare beziehungsweise als Verlauf entlang der
+Naht vor und sind damit direkt als Merkmalsvektor verwendbar. Die
 **Toleranzklassifikation gegen ±0.25 mm** *(Arbeitsplan)* setzt darauf auf.
 
 ---
@@ -462,14 +551,18 @@ Ausführlich mit Messwerten in
 `fehleranalyse_achsen_und_registrierung.md`; hier nur die konzeptionelle
 Einordnung.
 
-**Zwei systematische Versätze mit verschiedenen Ursachen.** Beide sind klein,
-werden aber leicht für denselben gehalten.
+**Zwei systematische Versätze mit verschiedenen Ursachen.** Sie werden leicht
+für denselben gehalten, unterscheiden sich aber in Größenordnung und
+Gegenmaßnahme um mehrere Zehnerpotenzen.
 
-*Auswertetiefen-Versatz* (−0.019 mm, Abschnitt 5.4). Die Auswertetiefe liegt
-knapp oberhalb der tatsächlichen Wurzel, wodurch der Spalt geringfügig zu klein
-gemessen wird. Konstant, ohne Streuung und über einen Parameter justierbar.
-Bewusst belassen, weil die Alternative — Auswertung am äußersten Messpunkt —
-ausreißerempfindlich wäre.
+*Auswertetiefen-Versatz* (Abschnitt 5.4). Die Auswertetiefe liegt oberhalb der
+tatsächlichen Wurzel, wodurch der Spalt **zu groß** gemessen wird — um
+`(d_wurzel − d_root)·2·tan(α)`, an den synthetischen Scans zwischen 0.49 mm
+und 5.18 mm je nach Fehlstellung. Der Betrag ist weder klein noch konstant.
+Er ist aber vollständig bestimmt, weil `d_root` mit ausgegeben wird und sich
+herausrechnen lässt; danach verbleiben −0.0093 mm. Die Konsequenz ist keine
+Fehlerschranke, sondern eine Nutzungsvorschrift: Die Spaltbreite darf nicht
+ohne ihre Auswertetiefe weiterverarbeitet werden.
 
 *Referenzebenen-Versatz* (0.001 mm, Abschnitt 5.3). Die Referenzebene selbst
 sitzt geringfügig zu tief, weil am Übergang zur Fase nur Punkte *unterhalb* der
@@ -508,6 +601,15 @@ belegen, dass das Verfahren geometrisch korrekt arbeitet — nicht, wie es sich
 unter realen Messbedingungen verhält. Insbesondere Spritzer und Reflexionen auf
 der Werkstückoberseite treffen mit der Referenzebene genau die Größe, an der die
 Genauigkeit der Spaltmessung hängt.
+
+**Nur Starrkörper-Fehlstellungen geprüft.** Die synthetische Serie verstellt
+die Werkstücke gegeneinander, verändert sie aber nicht in sich. Sämtliche
+Aussagen über das Verhalten der Merkmale — auch die Aufteilung der
+Flankenwinkel aus Abschnitt 5.5 — gelten deshalb zunächst nur für diesen Fall.
+Eine fehlerhafte Nahtvorbereitung mit einseitig veränderter Flankengeometrie
+ist eine andere Fehlerklasse und in der Serie nicht enthalten. Sie zu ergänzen
+ist der nächste sinnvolle Schritt, gerade weil die Flankenasymmetrie als
+Merkmal genau darauf zielt.
 
 ---
 

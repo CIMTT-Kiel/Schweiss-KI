@@ -318,8 +318,11 @@ Weitere Konsequenzen der Umstellung:
   (gemessen, nicht vorausgesetzt), Asymmetrie zwischen den Flanken und der
   Wurzelspalt ableiten.
 - Der Wurzelspalt ist ein **Messwert** an der tiefsten beidseitig besetzten
-  Tiefe, keine Extrapolation. Verbleibender systematischer Offset: −0.019 mm
-  aus dem P95-Schnitt bei `d_root`, konstant und ohne Streuung.
+  Tiefe `d_root`, keine Extrapolation. Weil `d_root` oberhalb der Wurzel liegt,
+  ist der Wert um `(d_wurzel − d_root)·2·tan(α)` größer als das Nennmaß —
+  0.49 mm bis 5.18 mm über die Serie, abhängig von der Fehlstellung. Wird
+  `d_root` mitgeführt und herausgerechnet, verbleiben **−0.0093 mm**, konstant
+  über die Translationsserie (Streuung 0.0001 mm).
 - Die Lage des Gegen-Werkstücks relativ zur Referenz (Höhenversatz, Verkippung)
   wird als eigenes Qualitätsmerkmal ausgegeben — es bildet Kantenversatz ab und
   wird **nicht** in die Höhenreferenz eingemittelt.
@@ -441,10 +444,27 @@ gerade dort die Flankenabdeckung leidet, ist konsistent.
 | Werkstückoberseite über Sicherheitsnetz (`R_Y_+1.0°`) | 42.5 % | **0 %** |
 | `inlier_ratio` Referenzebene, Minimum | 0.992 | **1.000** |
 
-Der verbleibende systematische Offset ist der P95-Schnitt bei `d_root`:
-**−0.019 mm**, konstant und ohne Streuung über die `T_Y`-Serie. Er ist über
-`flank_depth_max_quantile` justierbar; P95 wurde beibehalten, weil das echte
-Maximum ausreißerempfindlich wäre.
+Der verbleibende systematische Offset ist **−0.0093 mm**, konstant über die
+`T_Y`-Serie (−0.00913 bis −0.00953 über 3 mm aufgeprägte Spaltänderung). Er
+ist über `flank_depth_max_quantile` justierbar; P95 wurde beibehalten, weil das
+echte Maximum ausreißerempfindlich wäre.
+
+> **Korrektur.** Bis Juli 2026 stand hier −0.019 mm. Das war der Wert mit
+> einmal zu oft angewandtem Faktor `2·tan(α)`: Die Kopplung ist in der
+> Spaltbreite bereits enthalten, weil sich *beide* Flanken öffnen; sie ein
+> zweites Mal auf das Breitenresiduum anzuwenden verdoppelt es. Nachgerechnet
+> an `T_Y_+00.100mm`: Die Flankenprofile auf `d = 5.0 mm` ausgewertet ergeben
+> 1.590656 mm gegen ein Nennmaß von 1.5 + 0.1 = 1.6 mm, also −0.009344 mm.
+> Derselbe Wert ergibt sich aus dem Vergleich bei `d_root` selbst. Das
+> Verhältnis zum alten Wert beträgt 2.036 — die 2 aus der Doppelanwendung,
+> der Rest aus der Rundung auf zwei Stellen.
+>
+> Zu unterscheiden davon ist das **Tiefendefizit** selbst: `d_root` liegt
+> 0.245 mm über der Wurzel, was auf der Breite +0.49 mm ausmacht. Das ist
+> keine Messabweichung, sondern die Geometrie der V-Naht, und es ist über die
+> Serie nicht konstant (0.244 mm bis 2.589 mm Defizit). Die frühere Fassung
+> hatte beides vermengt und zudem die Richtung falsch angegeben: Oberhalb der
+> Wurzel gemessen fällt der Spalt *breiter* aus, nicht schmaler.
 
 Die vier großen Fehlerquellen — Achsen-Konvention, `coarse_pca`,
 Unterseiten-Kontamination und die z=0-Auswertungshöhe — sind behoben. Was

@@ -225,10 +225,12 @@ def plot_cross_section(
         - die zwei Flankengeraden, gezeichnet NUR über ihr tatsächliches
           Fitband – die Bandgrenzen sind damit direkt ablesbar
         - Fitband-Grenzen (d_min bzw. P95-Schnitt) als Hilfslinien
-        - Wurzeltiefe d_root: dort sitzt der bekannte systematische Offset
-          von ~0.019 mm. Wer den Wert im Bild sieht, kann bei realen Scans
-          beurteilen, ob P95 dort sinnvoll liegt oder die Flankenabdeckung
-          ein anderes Quantil verlangt.
+        - Wurzeltiefe d_root: sie liegt oberhalb der echten Wurzel, weshalb
+          die dort gemessene Breite um (d_wurzel - d_root)*2*tan(a) ueber dem
+          Nennmass liegt - synthetisch 0.49 bis 5.18 mm je nach Fehlstellung.
+          Nach Herausrechnen bleiben -0.0093 mm. Wer d_root im Bild sieht,
+          kann bei realen Scans beurteilen, ob P95 sinnvoll liegt oder die
+          Flankenabdeckung ein anderes Quantil verlangt.
 
     Diagnostisches Werkzeug: Gratbildung, Wurzeldurchhang, Heftnähte und
     ungewöhnliche Punktverteilungen sind hier sofort sichtbar – ein r² < 1

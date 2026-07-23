@@ -98,10 +98,12 @@ Hauptkomponente numerisch schlecht konditioniert; die Kandidaten-Auswahl greift
 daneben. ICP startet aus falscher Lage und findet nur ein lokales Minimum
 (`fitness = 0.30`).
 
-Folge für die Spaltmessung: Die um 2.5 mm angehobene Wolke legte die
-Extrapolation auf z=0 **unter den V-Scheitel**, wo sich die Flanken bereits
-gekreuzt haben. Die gemessene Breite war dadurch **invertiert** — Steigung −1.04
-statt +1.0.
+Folge für die Spaltmessung: Jede Flanke wird als Gerade beschrieben. Verlängert
+man diese Geraden über die Wurzel hinaus nach unten, laufen sie aufeinander zu
+und schneiden sich in einem Punkt. Die um 2.5 mm angehobene Wolke verlegte die
+Auswertung auf z=0 **unterhalb dieses Schnittpunkts** — dort liegen die beiden
+Flanken vertauscht, die linke rechts und umgekehrt. Die gemessene Breite kippte
+dadurch im Vorzeichen: Statt der erwarteten Steigung von +1.0 ergab sich −1.04.
 
 Deaktiviert, nicht entfernt. Begründung steht am Step in der Config.
 

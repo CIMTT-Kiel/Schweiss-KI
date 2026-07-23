@@ -29,7 +29,7 @@ Voraussetzung:
 
     Ebenso kritisch: passt gap_axis nicht zur tatsächlichen Lage der Naht,
     liegt der maximale cos-Wert der Flanken bei nur cos(2α)-nahen Werten und
-    der Step findet 0 Kandidaten, während die Deckfläche fälschlich die
+    der Step findet 0 Kandidaten, während die Werkstückoberseite fälschlich die
     höchsten cos-Werte liefert. Achsen daher immer gegen die Daten prüfen.
 """
 from __future__ import annotations

@@ -133,10 +133,10 @@ class BackgroundRemover(SegmentationStep):
 
         # 2./3. Ebenenfit je Werkstückseite, getrennt am gap_axis-Vorzeichen.
         #
-        # Ein gemeinsamer Fit über beide Deckflächen scheitert, sobald die
+        # Ein gemeinsamer Fit über beide Werkstückoberseiten scheitert, sobald die
         # Werkstücke gegeneinander verkippt sind: RANSAC findet dann die
         # dominante Hälfte und behandelt die andere als Ausreißer. Gemessen an
-        # R_Y_+01.000deg passten nur 251.284 von 435.483 Deckflächenpunkten in
+        # R_Y_+01.000deg passten nur 251.284 von 435.483 Punkten der Werkstückoberseite in
         # die gefundene Ebene – die übrigen 42 % fielen erst am Pipeline-Ende
         # über fill_unlabeled_with_background in Label 0, statt hier sauber
         # klassifiziert zu werden.

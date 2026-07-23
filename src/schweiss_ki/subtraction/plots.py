@@ -99,7 +99,7 @@ def plot_gap_profile(
     ax.plot(
         x_centers, gap_widths,
         color=COLOR_MEASURED, linewidth=1.8, marker="o", markersize=4,
-        label="Gemessen (an Deckfläche verankert)",
+        label="Gemessen (an Werkstückoberseite verankert)",
     )
     ax.set_xlabel("Position entlang Schweißnaht (mm)")
     ax.set_ylabel("Spaltbreite (mm)")
@@ -368,7 +368,7 @@ def plot_cross_section(
             zorder=20,
         )
     # ── Ausschnitt auf die Naht begrenzen ─────────────────────────────
-    # Die Deckflächen reichen über die volle Blechbreite (±50 mm), die Naht
+    # Die Werkstückoberseiten reichen über die volle Blechbreite (±50 mm), die Naht
     # ist nur wenige mm breit. Ohne Zoom quetscht aspect="equal" den
     # interessanten Bereich zu einem Splitter zusammen. Gezoomt wird auf die
     # Flanken, damit Flankenwinkel und Spalt ablesbar bleiben.

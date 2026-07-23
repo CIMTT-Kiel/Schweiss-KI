@@ -5,7 +5,7 @@ Schwerpunkt sind die beiden Regressionstests, die den Verstärkungs-
 mechanismus festnageln:
 
 1. dz-Invarianz (TestDepthAnchoring)
-   Die Auswertungshöhe ist an der Deckflächen-Ebene des Referenz-Werkstücks
+   Die Auswertungshöhe ist an der Referenzebene des Referenz-Werkstücks
    verankert, nicht an vertical_axis = 0. Ein Registrierungs-Höhenversatz dz
    darf die gemessene Spaltbreite deshalb NICHT verändern.
 
@@ -15,7 +15,7 @@ mechanismus festnageln:
    zwischen Fehler und -2·dz). Dieser Test hält den Fix ohne den Datensatz
    fest und wuerde einen Rueckfall sofort zeigen.
 
-2. Robustheit der Deckflächen-Ebene (TestTopPlaneRobustness)
+2. Robustheit der Referenzebene (TestTopPlaneRobustness)
    Der Faktor 2·tan(α) gilt auch für Fehler der Referenzebene SELBST. Bei
    realen Scans sitzen Spritzer und Reflexionen genau dort. Getestet wird,
    dass der RANSAC-Fit sie verträgt, dass inlier_ratio die Störung anzeigt
@@ -51,10 +51,10 @@ def make_v_seam(
     """V-Naht mit definierter Wurzelöffnung.
 
     Koordinaten: seam = X, gap = Y, vertical = Z.
-    Deckfläche bei z = 0, Wurzel bei z = -thickness.
+    Werkstückoberseite bei z = 0, Wurzel bei z = -thickness.
 
     Flanke A (negative gap-Seite), als Funktion der Tiefe d unter der
-    Deckfläche:
+    Werkstückoberseite:
         y_A(d) = -root_gap/2 - (thickness - d)·tan(α)
     Flanke B spiegelbildlich. Daraus:
         gap(d) = root_gap + 2·(thickness - d)·tan(α)
@@ -67,7 +67,7 @@ def make_v_seam(
     tan_a = np.tan(np.deg2rad(flank_angle_deg))
     y_top_edge = root_gap / 2 + thickness * tan_a  # Fasenkante an der Oberseite
 
-    # ── Deckflächen beidseits ────────────────────────────────────────
+    # ── Werkstückoberseiten beidseits ────────────────────────────────────────
     n_half = n_top // 2
     y_pos = rng.uniform(y_top_edge, half_width, n_half)
     y_neg = rng.uniform(-half_width, -y_top_edge, n_top - n_half)
@@ -78,7 +78,7 @@ def make_v_seam(
 
     # ── Flanken ──────────────────────────────────────────────────────
     def flank(sign: float, label: int):
-        d = rng.uniform(0.0, thickness, n_flank)          # Tiefe unter Deckfläche
+        d = rng.uniform(0.0, thickness, n_flank)          # Tiefe unter Werkstückoberseite
         y = sign * (root_gap / 2 + (thickness - d) * tan_a)
         x = rng.uniform(0.0, seam_length, n_flank)
         pts = np.column_stack([x, y, -d])
@@ -195,7 +195,7 @@ class TestDepthAnchoring:
     def test_invariant_under_rigid_tilt(self, step, v_seam):
         """Auch gegen eine Starrkörper-Verkippung invariant.
 
-        Deckfläche und Flanken drehen gemeinsam; eine daran verankerte
+        Werkstückoberseite und Flanken drehen gemeinsam; eine daran verankerte
         Auswertungshöhe ist rotationsinvariant. Das ist der Grund, warum der
         Fix auch die rotation_x/rotation_y-Faelle abraeumt.
         """
@@ -209,11 +209,11 @@ class TestDepthAnchoring:
 
 
 # ---------------------------------------------------------------------------
-# 2. Robustheit der Deckflächen-Ebene
+# 2. Robustheit der Referenzebene
 # ---------------------------------------------------------------------------
 
 def add_spatter(pcd, labels, fraction: float, height: float = 1.5, seed: int = 3):
-    """Setzt Ausreißer auf die REFERENZ-Deckfläche (positive gap-Seite).
+    """Setzt Ausreißer auf die REFERENZ-Werkstückoberseite (positive gap-Seite).
 
     Simuliert Spritzer/Reflexionen: Punkte mit Background-Label, die deutlich
     ueber der echten Deckflaeche liegen.

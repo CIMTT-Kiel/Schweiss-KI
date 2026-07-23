@@ -678,7 +678,7 @@ class TestAxisConvention:
     Ursache: die Steps waren fest auf gap_axis=X verdrahtet, während die
     Datensätze die Werkstücke entlang Y trennen (Naht ‖ X). Die Flanken-
     Normalen erreichten dadurch nur cos ≈ 0.5 statt ≈ 1.0, blieben unter
-    dem Schwellwert 0.85 – und die Deckfläche lieferte mit cos ≈ 0.707
+    dem Schwellwert 0.85 – und die Werkstückoberseite lieferte mit cos ≈ 0.707
     fälschlich die höchsten Werte.
     """
 
@@ -707,7 +707,7 @@ class TestAxisConvention:
         """Der ursprüngliche Bug: gap_axis=X auf Naht-‖-X-Daten.
 
         Dokumentiert das Fehlerbild – 0 Kandidaten, und ein irreführend
-        hoher cos_max, der von der Deckfläche stammt (cos(45°) ≈ 0.707),
+        hoher cos_max, der von der Werkstückoberseite stammt (cos(45°) ≈ 0.707),
         nicht von den Flanken (cos ≈ 0.5).
 
         n_sub_gap=0: die Sub-Gap-Artefakte der Fixture tragen zufällige
@@ -730,7 +730,7 @@ class TestAxisConvention:
             art = report.artifacts[side]
             assert art["status"] == "insufficient_candidates"
             assert art["n_inliers"] == 0
-            # cos_max stammt von der Deckfläche (0,0,1) · (0.707,0,0.707)
+            # cos_max stammt von der Werkstückoberseite (0,0,1) · (0.707,0,0.707)
             assert art["cos_max"] == pytest.approx(0.707, abs=0.08)
             assert art["cos_max"] < 0.85, "würde sonst den Vorfilter passieren"
 
@@ -756,7 +756,7 @@ class TestAxisConvention:
         assert picked.sum() > 0, "Setup-Annahme: Schwellwert 0.7 findet Kandidaten"
         background_share = (gt[picked] == NAME_TO_ID["background"]).mean()
         assert background_share > 0.9, (
-            "Erwartet: fast ausschließlich Deckflächen-Punkte werden als "
+            "Erwartet: fast ausschließlich Punkte der Werkstückoberseite werden als "
             f"Flanke gelabelt, tatsächlich {background_share:.2f}"
         )
 

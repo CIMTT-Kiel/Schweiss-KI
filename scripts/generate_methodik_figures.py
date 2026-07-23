@@ -125,7 +125,7 @@ def figure_axes_convention(path: Path):
 # ── Bild 2: Querschnitt mit Verankerung ───────────────────────────────
 
 def _flank_xy(sign, d_lo, d_hi):
-    """Flankenlinie als Funktion der Tiefe d unter der Deckfläche."""
+    """Flankenlinie als Funktion der Tiefe d unter der Werkstückoberseite."""
     d = np.array([d_lo, d_hi])
     y = sign * (ROOT_GAP / 2 + (THICK - d) * TAN_A)
     return y, -d
@@ -146,7 +146,7 @@ def figure_cross_section(path: Path):
 
     # Referenzebene (der Anker)
     ax.axhline(0, color=C_REF, linewidth=2.2, zorder=6)
-    ax.text(0, 0.55, "Referenzebene — Deckfläche Werkstück A   (d = 0)",
+    ax.text(0, 0.55, "Referenzebene — Oberseite Werkstück A   (d = 0)",
             color=C_REF, fontsize=9.5, weight="bold", ha="center")
 
     # Flankenprofile über ihrem Fitband
@@ -183,7 +183,7 @@ def figure_cross_section(path: Path):
     ax.set_ylim(-THICK - 1.1, 1.15)
     ax.set_aspect("equal")
     _style(ax, "Y — Spalt-Querrichtung (mm)", "Z (mm)")
-    ax.set_title("Deckflächenverankerte Spaltmessung im Querschnitt",
+    ax.set_title("Spaltmessung an der Werkstückoberseite im Querschnitt",
                  fontsize=13, pad=14)
     ax.legend(loc="upper left", bbox_to_anchor=(0.01, 0.80),
               fontsize=9, framealpha=0.95)
@@ -209,28 +209,30 @@ def figure_amplification(path: Path):
     # Schnitte im Material. (Bei zu hoher Lage laege der feste Schnitt
     # unterhalb der Wurzel, also ausserhalb des Bauteils.)
     d_nom = THICK
-    z_deck = -dz   # gemessene Deckfläche, um dz zu tief
+    z_deck = -dz   # gemessene Werkstückoberseite, um dz zu tief
     x_depth = 7.2
 
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 5.0), dpi=DPI, sharey=True)
 
     def draw(ax, anchored):
-        # Soll-Höhe der Deckfläche (wo das Bauteil liegen sollte).
+        # Soll-Höhe der Werkstückoberseite (wo das Bauteil liegen sollte).
         # Kräftiger als eine reine Hilfslinie: sie ist im linken Panel der
         # Bezugspunkt und muss auch projiziert erkennbar bleiben.
         ax.axhline(0, color=C_SOLL, linestyle=(0, (6, 3)), linewidth=1.7,
                    zorder=2)
-        # Tatsächlich gemessene Deckfläche
+        # Tatsächlich gemessene Werkstückoberseite
         ax.axhline(z_deck, color=C_REF, linewidth=2.2, zorder=6)
         for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
             y, z = _flank_xy(sign, 0.0, THICK)
             ax.plot(y, z + z_deck, color=c, linewidth=2.8, zorder=8)
 
         if anchored:
-            z_anchor = z_deck                # Bezug: Deckfläche des Bauteils
+            z_anchor = z_deck                # Bezug: Oberseite des Bauteils
             z_eval = z_deck - d_nom
-            farbe, titel = C_REF, "verankert an der Deckfläche"
-            anchor_txt = "Bezug:\nDeckfläche"
+            farbe, titel = C_REF, "verankert an der Werkstückoberseite"
+            # Kurzform in den Beschriftungen: der Panel-Titel traegt den
+            # vollen Begriff, ausgeschrieben kollidieren sie mit der Bemassung.
+            anchor_txt = "Bezug:\nOberseite"
             mess_txt = "= Wurzelspalt"
             note = ("Bezug wandert mit dem Bauteil\n"
                     "→ Schnitt trifft die Wurzel, Spalt korrekt")
@@ -253,14 +255,14 @@ def figure_amplification(path: Path):
         ax.annotate("", xy=(x_depth, z_eval), xytext=(x_depth, z_anchor),
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=1.8))
         # Die Auswertetiefe entspricht der Blechdicke: die Wurzel liegt genau
-        # eine Blechdicke unter der Deckfläche.
+        # eine Blechdicke unter der Werkstückoberseite.
         z_mid = (z_anchor + z_eval) / 2
         ax.text(x_depth + 0.5, z_mid + 0.1, f"{d_nom:.1f} mm",
                 color=farbe, fontsize=10, va="bottom", weight="bold")
         ax.text(x_depth + 0.5, z_mid - 0.1, "= Blechdicke",
                 color=farbe, fontsize=8.5, va="top")
 
-        # dz-Bemaßung zwischen Soll-Höhe und gemessener Deckfläche.
+        # dz-Bemaßung zwischen Soll-Höhe und gemessener Werkstückoberseite.
         # Pfeile von AUSSEN nach innen, wie in der technischen Zeichnung bei
         # kleinen Maßen üblich: zwischen 0.6 mm passen zwei Pfeilspitzen nicht,
         # sie verschmelzen sonst zu einem Klecks.
@@ -273,7 +275,7 @@ def figure_amplification(path: Path):
                 weight="bold",
                 bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
                           edgecolor="none", alpha=0.92))
-        # Bei der Deckflächen-Verankerung nach unten setzen: nach oben läge
+        # Bei der Verankerung an der Werkstückoberseite nach unten setzen: nach oben läge
         # der Text auf der Soll-Höhen-Linie.
         ax.text(x_depth + 0.5,
                 z_anchor - 0.2 if anchored else z_anchor + 0.15, anchor_txt,
@@ -308,10 +310,10 @@ def figure_amplification(path: Path):
     # Beide Beschriftungen direkt an ihrer Linie – frei schwebend liessen
     # sie sich nicht zuordnen. Zweizeilig, weil ein breiter Text sonst in
     # Flanke A hineinlaeuft. Der Zahlenwert steht an der dz-Bemassung.
-    axes[0].text(-9.6, 0.15, "Soll-Höhe der\nDeckfläche",
+    axes[0].text(-9.6, 0.15, "Soll-Höhe der\nOberseite",
                  color=C_SOLL, fontsize=8.5, weight="bold", va="bottom",
                  linespacing=1.4)
-    axes[0].text(-9.6, -0.8, "gemessene\nDeckfläche",
+    axes[0].text(-9.6, -0.8, "gemessene\nOberseite",
                  color=C_REF, fontsize=8.5, weight="bold", va="top",
                  linespacing=1.4)
     fig.suptitle(

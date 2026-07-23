@@ -1,8 +1,8 @@
 """
 GapProfile – Wurzelspalt-Profil entlang der Naht-Längsrichtung.
 
-Methodik (an der Deckflächen-Ebene verankert):
-    - Je Werkstück wird die Deckflächen-Ebene per RANSAC gefittet. Die Ebene
+Methodik (an der Referenzebene verankert):
+    - Je Werkstück wird die Referenzebene per RANSAC gefittet. Die Ebene
       des Referenz-Werkstücks definiert die Tiefe d = 0.
     - Für jede der beiden Flanken werden die segmentierten Punkte entlang der
       Naht-Längsachse in Bins zerlegt.
@@ -18,14 +18,14 @@ Warum nicht mehr auf z = 0 extrapoliert wird:
     dw/dz = 2·tan(α) in die Spaltbreite ein – bei der 90°-Naht verdoppelt.
     Auf den 61 synthetischen Fällen war das die alleinige Ursache der
     verbliebenen Untererfassung (Korrelation 0.99998 zwischen Fehler und
-    -2·dz), mit Fehlern bis 1.3 mm. Die Verankerung an der Deckfläche lässt dz
+    -2·dz), mit Fehlern bis 1.3 mm. Die Verankerung an der Werkstückoberseite lässt dz
     strukturell herausfallen: der Registrierungseinfluss sank auf max. 0.008 mm
     über alle 61 Fälle. Details in docs/fehleranalyse_achsen_und_registrierung.md.
 
 Voraussetzungen:
     - Scan ist bereits ausgerichtet (XEdgeAlign + ICPFine vorher in Pipeline).
     - source_labels enthält Flanken- UND Background-Labels (aus AP2.1) –
-      letztere für die Deckflächen-Ebenen.
+      letztere für die Referenzebenen.
     - Achsen-Konvention: Naht entlang einer konfigurierbaren Achse,
       Spalt entlang einer dazu senkrechten Achse, Vertikale = Z.
 """
@@ -66,7 +66,7 @@ class GapProfile(DeviationStep):
         n_bins: int = 20,
         edge_margin: float = 10.0,
         min_points_per_bin: int = 3,
-        # ── Deckflächen-Verankerung ───────────────────────────────────
+        # ── Verankerung an der Werkstückoberseite ───────────────────────────────────
         reference_side: str = "positive",
         top_plane_ransac_threshold: float = 0.25,
         top_plane_max_iterations: int = 1000,
@@ -178,7 +178,7 @@ class GapProfile(DeviationStep):
         bin_edges = np.linspace(seam_min, seam_max, self.n_bins + 1)
         bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
-        # ── Deckflächen-Ebenen je Werkstück ───────────────────────────
+        # ── Referenzebenen je Werkstück ───────────────────────────
         # Die A/B-Trennung kommt geometrisch (Vorzeichen auf gap_axis), nicht
         # aus den Labels: 'background' ist EIN Label für beide Werkstücke, und
         # background_remover läuft als erster Step, wenn noch nichts anderes
@@ -204,11 +204,11 @@ class GapProfile(DeviationStep):
 
         if not anchored:
             logger.warning(
-                f"  GapProfile: Deckflächen-Verankerung nicht möglich ({gate_msg}). "
+                f"  GapProfile: Verankerung an der Werkstückoberseite nicht möglich ({gate_msg}). "
                 f"Tiefenbezogene Auswertung wird übersprungen."
             )
 
-        # ── Flankenfits über Tiefe unter der Referenz-Deckfläche ──────
+        # ── Flankenfits über Tiefe unter der Referenz-Werkstückoberseite ──────
         n_valid_depth = 0
         prof = {s: {k: np.full(self.n_bins, np.nan) for k in
                     ("q0", "slope", "r2", "rms", "n_points", "d_lo", "d_hi")}
@@ -243,7 +243,7 @@ class GapProfile(DeviationStep):
 
         if anchored:
             logger.info(
-                f"  GapProfile: verankert an Deckfläche ({self.reference_side}), "
+                f"  GapProfile: verankert an Werkstückoberseite ({self.reference_side}), "
                 f"inlier {ref_plane['inlier_ratio']:.2f}, rms {ref_plane['rms_mm']:.3f} mm; "
                 f"{n_valid_depth}/{self.n_bins} Bins mit Wurzelspalt"
             )
@@ -307,13 +307,13 @@ class GapProfile(DeviationStep):
 
         return artifacts
 
-    # ── Deckflächen-Verankerung ───────────────────────────────────────
+    # ── Verankerung an der Werkstückoberseite ───────────────────────────────────────
 
     def _fit_top_plane(self, pts: np.ndarray) -> Optional[Dict[str, Any]]:
-        """RANSAC-Ebenenfit auf eine Deckflächen-Punktmenge.
+        """RANSAC-Ebenenfit auf eine Punktmenge der Werkstückoberseite.
 
         RANSAC statt Least-Squares, weil bei realen Scans Spritzer und
-        Reflexionen genau auf der Deckfläche sitzen und ein LSQ-Fit dort
+        Reflexionen genau auf der Werkstückoberseite sitzen und ein LSQ-Fit dort
         mitwandert. Der Fit-Fehler geht mit 2·tan(α) in die Spaltbreite ein
         (siehe Klassen-Docstring) – deshalb werden inlier_ratio und rms als
         Gütemaße mitgegeben.
@@ -360,7 +360,7 @@ class GapProfile(DeviationStep):
     def _relative_pose(
         self, ref: Dict[str, Any], opp: Dict[str, Any], opp_pts: np.ndarray
     ) -> Dict[str, float]:
-        """Lage der Gegenseite relativ zur Referenz-Deckfläche.
+        """Lage der Gegenseite relativ zur Referenz-Werkstückoberseite.
 
         Bildet Kantenversatz ab (Höhenversatz) und relative Verkippung,
         zerlegt in Naht-Längs- und Querrichtung. Eigenes Qualitätsmerkmal –

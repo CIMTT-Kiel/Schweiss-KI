@@ -37,12 +37,12 @@ entlang X). Gemessen am echten CAD:
 | Fläche | Normale | cos mit erwarteter Normale |
 |---|---|---|
 | echte Flanke | `[0, ±0.71, 0.71]` | **0.500** |
-| Deckfläche | `[0, 0, 1]` | **0.707** |
+| Werkstückoberseite | `[0, 0, 1]` | **0.707** |
 
 Bei `normal_cos_threshold = 0.85` passiert keine der beiden den Vorfilter.
 
 **Die Falle:** Der beobachtete `cos_max` von ~0.77 stammte von der verrauschten
-**Deckfläche**, nicht von den Flanken (die kommen nie über 0.50). Ein Senken des
+**Werkstückoberseite**, nicht von den Flanken (die kommen nie über 0.50). Ein Senken des
 Schwellwerts auf ~0.7 hätte deshalb die Werkstück-Oberseite als Flanke gelabelt
 und die echten Flanken weiterhin verfehlt — belegt durch
 `test_lowering_threshold_would_mislabel_top_surface`: >90 % der so gefundenen
@@ -148,15 +148,15 @@ Für synthetische Daten ist das Preprocessing jetzt komplett abgeschaltet
 aus Performance- oder Dichtegründen downgesampelt wird — dort aber vom
 Messrauschen maskiert. Siehe Abschnitt 5.
 
-### 3.5 Ein Deckflächen-Fit für zwei Werkstücke (`139a528`)
+### 3.5 Ein Fit der Referenzebene für zwei Werkstücke (`139a528`)
 
-`background_remover` fittete **eine** Ebene über beide Deckflächen. Sobald die
+`background_remover` fittete **eine** Ebene über beide Werkstückoberseiten. Sobald die
 Werkstücke gegeneinander verkippt sind, findet RANSAC damit die dominante Hälfte
 und behandelt die andere als Ausreißer:
 
 | `R_Y_+01.000deg` | Punkte |
 |---|---|
-| Deckflächenpunkte gesamt | 435.483 |
+| Punkte der Werkstückoberseite gesamt | 435.483 |
 | in der gefundenen Ebene | 251.284 |
 | durchgefallen | **184.199 (42 %)** |
 
@@ -182,7 +182,7 @@ Maßnahme hätte also nichts belegt.
 
 **Die eigentliche Ursache war der Ein-Ebenen-Fit oben.** Die Streuung kam nicht
 aus RANSACs Zufallsstichprobe, sondern aus der **Mehrdeutigkeit**: Bei zwei
-konkurrierenden Deckflächen musste der gemeinsame Fit zwischen ihnen wählen, und
+konkurrierenden Werkstückoberseiten musste der gemeinsame Fit zwischen ihnen wählen, und
 die Wahl fiel je nach Stichprobe anders aus. Je Seite getrennt gefittet gibt es
 nur eine Ebene — und die findet RANSAC stabil.
 
@@ -195,7 +195,7 @@ Gemessen an `R_Y_+01.000deg`, 12 Läufe mit *wechselnden* Seeds:
 
 `C_TR_08` und `T_X_+00.100mm` waren in beiden Varianten stabil — der Effekt trat
 ausschließlich bei verkippten Werkstücken auf, also genau dort, wo zwei
-Deckflächen konkurrierten.
+Werkstückoberseiten konkurrierten.
 
 **Bestätigt über den vollen Batch-Pfad**, zwei komplette Läufe mit gleichem Seed:
 
@@ -226,7 +226,7 @@ löste ihn nebenbei.
 ## 4. Der Verstärkungsmechanismus der Spaltmessung
 
 > **Behoben** (`4a8bbae`) — die Auswertungshöhe ist jetzt an der
-> Deckflächen-Ebene verankert. Der Abschnitt beschreibt den Mechanismus, weil er
+> Referenzebene verankert. Der Abschnitt beschreibt den Mechanismus, weil er
 > für andere Öffnungswinkel und für die realen Scans relevant bleibt; die
 > verbleibende Abhängigkeit steht in 5.4.
 
@@ -285,10 +285,10 @@ der Naht (`dz_eff = dz − x̄·sin(ry_reg)`):
 
 Je spitzer die Naht, desto stärker verstärkt sie Registrierungsfehler.
 
-### 4.1 Behebung: Verankerung an der Deckflächen-Ebene (`4a8bbae`)
+### 4.1 Behebung: Verankerung an der Referenzebene (`4a8bbae`)
 
 Die Auswertungshöhe zielt nicht mehr auf `vertical_axis = 0`, sondern auf die
-aus dem Scan gefittete Deckflächen-Ebene des Referenz-Werkstücks. Damit fällt
+aus dem Scan gefittete Referenzebene des Referenz-Werkstücks. Damit fällt
 `dz` strukturell heraus, statt verdoppelt einzugehen.
 
 Registrierungseinfluss, isoliert gemessen (registriert gegen unregistriert):
@@ -309,7 +309,7 @@ ist die verankerte Messung invariant — unabhängig von ihrer Größe.
 
 Weitere Konsequenzen der Umstellung:
 
-- Die Spaltbreite ist als Funktion der **Tiefe unter der Referenz-Deckfläche**
+- Die Spaltbreite ist als Funktion der **Tiefe unter der Referenz-Werkstückoberseite**
   parametrisiert, nicht als Einzelwert. Ausgegeben werden je Flanke und Bin
   Achsenabschnitt, Steigung und Gütemaß — daraus lassen sich Flankenwinkel
   (gemessen, nicht vorausgesetzt), Asymmetrie zwischen den Flanken und der
@@ -357,7 +357,7 @@ bereits im CAD-Frame. Kommt später ein Scan in freier Lage, muss `coarse_pca`
 **repariert** werden — die schlecht konditionierte dritte Hauptachse gesondert
 behandeln —, nicht nur zugeschaltet.
 
-Ansatz für später: Z-Lage über die Deckflächen-Ebene fixieren, die der
+Ansatz für später: Z-Lage über die Referenzebene fixieren, die der
 `background_remover` per RANSAC ohnehin fittet (`plane_model`, `z_center` liegen
 im Report). PCA übernähme dann nur die beiden gut konditionierten Achsen in der
 Blechebene. Ungetestet.
@@ -371,16 +371,16 @@ Slice, der nicht an einzelnen Randpunkten hängt.
 ### 5.4 Die Abhängigkeit ist verlagert, nicht beseitigt
 
 Der Fix aus Abschnitt 4.1 verankert die Auswertungshöhe an der
-RANSAC-Deckflächenebene. `dz` fällt damit heraus — **an seine Stelle tritt aber
+per RANSAC gefittete Referenzebene. `dz` fällt damit heraus — **an seine Stelle tritt aber
 der Fit-Fehler δ dieser Ebene, mit demselben Faktor `2·tan(α)`.**
 
 Die Genauigkeit der Spaltbreite hängt jetzt an der **Qualität der
-Deckflächen-Ebene**; deren Robustheit ist damit sicherheitskritisch. Bei
+Referenzebene**; deren Robustheit ist damit sicherheitskritisch. Bei
 synthetischen Daten unkritisch (`inlier_ratio` ≥ 0.993, `rms` ≈ 0.013 mm), bei
 realen Scans sitzen dort aber Spritzer und Reflexionen.
 
 Abgesichert ist das durch:
-- **RANSAC statt Least-Squares** für die Deckfläche — ein LSQ-Fit würde mit den
+- **RANSAC statt Least-Squares** für die Werkstückoberseite — ein LSQ-Fit würde mit den
   Ausreißern mitwandern
 - **`inlier_ratio` und `rms` als Gütemaße** im Report
 - **ein Gate**: unterschreitet `inlier_ratio` den Schwellwert, wird die
@@ -416,7 +416,7 @@ bis z ≈ −1.0 reicht; wo `[d_min, P95]` nicht genug Spreizung hat, greift
 `min_depth_span`.
 
 Die Vermutung, der Zwei-Ebenen-Fit (3.5) würde das entspannen, hat sich **nicht
-bestätigt**: vorher wie nachher 60 von 61 Fällen mit 20/20. Deckflächen- und
+bestätigt**: vorher wie nachher 60 von 61 Fällen mit 20/20. Werkstückoberseiten- und
 Flankenabdeckung hängen hier nicht zusammen.
 
 `C_TR_08` ist der Fall mit dem schlechtesten Reg-Residuum (0.693 mm) — dass
@@ -435,7 +435,7 @@ gerade dort die Flankenabdeckung leidet, ist konsistent.
 | Registrierungseinfluss, max über alle 61 | 1.298 mm | **0.008 mm** |
 | Registrierungseinfluss, RMS | 0.415 mm | **0.002 mm** |
 | innerhalb 0.25-mm-Toleranz | 63.9 % | **100 %** |
-| Deckfläche über Sicherheitsnetz (`R_Y_+1.0°`) | 42.5 % | **0 %** |
+| Werkstückoberseite über Sicherheitsnetz (`R_Y_+1.0°`) | 42.5 % | **0 %** |
 | `inlier_ratio` Referenzebene, Minimum | 0.992 | **1.000** |
 
 Der verbleibende systematische Offset ist der P95-Schnitt bei `d_root`:

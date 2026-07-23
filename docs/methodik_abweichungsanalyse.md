@@ -35,8 +35,8 @@ Qualitätsbewertung, Merkmalsextraktion für die RL-Optimierung in AP3.
 
 **Umsetzungsentscheidungen dieses Projekts** — nicht im Arbeitsplan vorgegeben,
 sondern aus der Bauteilgeometrie und den Messdaten abgeleitet: die
-Achsenkonvention, die Aufteilung in Deckfläche/Flanken/Spaltregion, die
-deckflächenverankerte Spaltmessung, die Beschreibung jeder Flanke durch ein
+Achsenkonvention, die Aufteilung in Werkstückoberseite/Flanken/Spaltregion, die
+an der Werkstückoberseite verankerte Spaltmessung, die Beschreibung jeder Flanke durch ein
 eigenes Profil sowie die konkrete Auswahl der Qualitätsmerkmale.
 
 ---
@@ -82,7 +82,7 @@ gehört. Die Punktwolke wird in fünf Regionen zerlegt:
 
 | Region | Bedeutung |
 |---|---|
-| Deckfläche | Werkstück-Oberseite, Umgebung |
+| Werkstückoberseite | ebene Oberseite der Bleche, Umgebung |
 | Flanke A / Flanke B | die beiden Fasen der V-Naht |
 | Spaltregion | freier Raum zwischen den Fasen |
 | Sub-Spalt-Artefakte | Punkte unterhalb der Flankenunterkante |
@@ -159,7 +159,7 @@ ist notwendig, aber nicht hinreichend:
 
 - **global** — ein Gesamturteil für die Toleranzbewertung
 - **je Region** — weil ein guter Gesamtwert eine schlechte Flanke verdecken
-  kann. Die Deckfläche stellt die überwiegende Mehrheit der Punkte; eine
+  kann. Die Werkstückoberseite stellt die überwiegende Mehrheit der Punkte; eine
   fehlerhafte Fase geht im Mittelwert unter
 - **räumlich, voxelbasiert** — das Bauteil wird in Würfel zerlegt und je Würfel
   ausgewertet. Damit werden lokale Häufungen sichtbar, die selbst in der
@@ -173,7 +173,7 @@ dreistufige Aggregation ist Umsetzungsentscheidung.
 
 ---
 
-## 5. Deckflächenverankerte Spaltmessung
+## 5. Spaltmessung an der Werkstückoberseite
 
 Dies ist das Kernstück des Verfahrens und die Stelle, an der die meisten
 methodischen Entscheidungen zusammenlaufen.
@@ -217,7 +217,7 @@ bei künftigen Bauteilen mit anderer Nahtvorbereitung neu zu bewerten ist.
 
 *Beide Seiten zeigen dasselbe Bauteil, um `dz` = 0.6 mm zu tief registriert.
 Gemessen wird jeweils 5 mm unter dem Bezug — links ab der Nullebene des
-Koordinatensystems, rechts ab der Deckfläche des Bauteils. Links liegt der
+Koordinatensystems, rechts ab der Oberseite des Bauteils. Links liegt der
 Schnitt dadurch nur 4.4 mm tief im Material und trifft die Wurzel nicht: 2.7 mm
 statt 1.5 mm, also `2·dz` = 1.2 mm zu breit. Rechts wandert der Bezug mit dem
 Bauteil, der Schnitt trifft die Wurzel und liefert den korrekten Wert.*
@@ -225,7 +225,7 @@ Bauteil, der Schnitt trifft die Wurzel und liefert den korrekten Wert.*
 ### 5.3 Die Verankerung
 
 Die Lösung ist, den Höhenbezug nicht aus dem Koordinatensystem zu nehmen,
-sondern **aus dem Bauteil selbst**: Die Deckfläche des Referenz-Werkstücks wird
+sondern **aus dem Bauteil selbst**: Die Oberseite des Referenz-Werkstücks wird
 aus dem Scan bestimmt und definiert die Tiefe null. Alle Tiefen werden relativ
 dazu gemessen.
 
@@ -234,13 +234,13 @@ Scan, verschiebt sich die Referenzebene mit — die Tiefe im Bauteil bleibt
 dieselbe. Die Messung ist gegen **Starrkörper-Fehlstellungen invariant**,
 gleichgültig wie groß sie sind.
 
-**Zwei getrennte Ebenen, nicht eine gemeinsame.** Die Deckfläche wird je
+**Zwei getrennte Ebenen, nicht eine gemeinsame.** Die Werkstückoberseite wird je
 Werkstück eigenständig bestimmt. Dafür gibt es zwei unabhängige Gründe:
 
 *Erstens die Geometrie.* Sind die Werkstücke gegeneinander verkippt — was
 gerade der interessante Fehlerfall ist — existiert keine gemeinsame Ebene. Ein
 gemeinsamer Fit findet dann die dominante Hälfte und behandelt die andere als
-Ausreißer; ein erheblicher Teil der Deckfläche bleibt unklassifiziert.
+Ausreißer; ein erheblicher Teil der Werkstückoberseite bleibt unklassifiziert.
 
 *Zweitens die Eindeutigkeit.* Ein gemeinsamer Fit muss bei Verkippung zwischen
 zwei konkurrierenden Ebenen **wählen**. Diese Wahl hängt von der zufälligen
@@ -255,9 +255,9 @@ Anlass.
 gilt jetzt für Fehler der Referenzebene selbst: Liegt der Ebenenfit um δ
 daneben, geht δ mit demselben Faktor `2·tan(α)` ein. Die Genauigkeit der
 Spaltmessung hängt damit an der Qualität dieser Ebene. Bei synthetischen Daten
-ist das unkritisch; bei realen Scans sitzen auf der Deckfläche Spritzer und
+ist das unkritisch; bei realen Scans sitzen auf der Werkstückoberseite Spritzer und
 Reflexionen. Die Ebenenbestimmung ist deshalb ausreißerrobust ausgelegt, gibt
-Gütemaße mit aus und verweigert die Auswertung, wenn die Deckfläche zu stark
+Gütemaße mit aus und verweigert die Auswertung, wenn die Werkstückoberseite zu stark
 gestört ist — lieber kein Wert als ein falscher Bezug.
 
 ### 5.4 Zwei getrennte Flankenprofile
@@ -295,7 +295,7 @@ Spaltbreite hinausgehen:
 | **Flankenwinkel je Seite** | tatsächliche Nahtvorbereitung |
 | **Flankenasymmetrie** | Differenz beider Winkel |
 | **Kantenversatz** | Höhenversatz der Werkstücke zueinander |
-| **relative Verkippung** | Winkel zwischen den Deckflächen |
+| **relative Verkippung** | Winkel zwischen den Werkstückoberseiten |
 | **Fit-Güte je Flanke** | Profilstörungen, etwa durch Heftnähte |
 
 Bemerkenswert ist der erste Punkt: Der Flankenwinkel wird **gemessen, nicht
@@ -366,12 +366,12 @@ angewiesen ist.
 Einschränkung ist wichtig und wird leicht überlesen: Die Verankerung macht die
 Messung unempfindlich gegen Verschiebung und Verdrehung des *gesamten*
 Bauteils. Gegen eine tatsächliche Verformung — ein verzogenes Blech, eine
-gekrümmte Deckfläche — hilft sie nicht. Dort ist die Referenzebene selbst keine
+gekrümmte Werkstückoberseite — hilft sie nicht. Dort ist die Referenzebene selbst keine
 Ebene mehr, und die Grundannahme des Verfahrens greift nicht.
 
 **Reproduzierbarkeit.** Auf synthetischen Daten liefern wiederholte Auswertungen
 identische Ergebnisse. Ursache ist nicht ein fester Zufallsstartwert, sondern die
-Beseitigung der Mehrdeutigkeit durch die getrennten Deckflächen-Ebenen
+Beseitigung der Mehrdeutigkeit durch die getrennten Referenzebenen
 (Abschnitt 5.3) — es gibt keine Wahl mehr zu treffen. Bei realen Scans mit
 verrauschten Normalen kann die Ebenenbestimmung wieder Spielraum bekommen; das
 ist an den Heidenbluth-Daten zu prüfen, sobald sie vorliegen.
@@ -380,7 +380,7 @@ ist an den Heidenbluth-Daten zu prüfen, sobald sie vorliegen.
 synthetischen Scans mit exakten Oberflächennormalen und ohne Messrauschen. Sie
 belegen, dass das Verfahren geometrisch korrekt arbeitet — nicht, wie es sich
 unter realen Messbedingungen verhält. Insbesondere Spritzer und Reflexionen auf
-der Deckfläche treffen mit der Referenzebene genau die Größe, an der die
+der Werkstückoberseite treffen mit der Referenzebene genau die Größe, an der die
 Genauigkeit der Spaltmessung hängt.
 
 ---

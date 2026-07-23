@@ -132,7 +132,7 @@ gespeichert.
 ### 4.4 GapProfile
 
 > ⚠️ **Veraltet.** Beschreibt den Stand vor der Umstellung auf die
-> deckflächenverankerte Auswertung. Für das aktuelle Verfahren siehe
+> an der Werkstückoberseite verankerte Auswertung. Für das aktuelle Verfahren siehe
 > [`methodik_abweichungsanalyse.md`](methodik_abweichungsanalyse.md), Abschnitt 5.
 
 Wurzelspalt-Verlauf entlang der Naht-Längsrichtung, V-Naht-spezifisch.

@@ -134,7 +134,10 @@ def _flank_xy(sign, d_lo, d_hi):
 
 def figure_cross_section(path: Path):
     fig, ax = plt.subplots(figsize=(9, 5.5), dpi=DPI)
-    d_min, d_root = 0.5, THICK - 0.25
+    # d_root auf der Wurzel, nicht knapp darueber: sonst enden die
+    # Flankenlinien hoeher als der Blechquerschnitt, was wie ein Fehler
+    # aussieht. Konsistent mit der Auswertetiefe in Bild 3.
+    d_min, d_root = 0.5, THICK
     x_lim = 10.5
 
     # Werkstückkörper, flach geschlossen (nicht sloped)

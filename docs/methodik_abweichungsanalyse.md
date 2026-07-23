@@ -135,13 +135,42 @@ das CAD ausgerichtet und aus beiden Transformationen die Lage zueinander
 bestimmt. Die so verschobenen Wolken werden verworfen — würde man sie behalten,
 verschwände genau die Fehlstellung, die den Messwert ausmacht.
 
-**Folge für die Spaltmessung.** Weil die Ausrichtung den gesamten Scan bewegt,
-schlägt ein Höhenanteil ihrer Transformation auf alles durch, was gegen eine
-feste Höhe im Koordinatensystem gemessen wird. Genau daher rührt der Versatz
-`dz` in Abschnitt 5.2. Der Wert entsteht, weil ICP den Gesamtfehler über alle
-Punkte minimiert und dieses Optimum bei einem kleinen Höhenversatz liegen kann —
-Scan und CAD-Referenz haben unterschiedliche Punktdichten, der Scan erfasst
-zudem nur die von oben sichtbare Seite.
+**Das CAD steht fest, der Scan wird bewegt.** Das Ideal-Bauteil ist das Ziel und
+bleibt unverändert; ausgerichtet wird der reale Scan. Man könnte daraus
+schließen, die Lage des Scans sei damit eindeutig bestimmt — sie ist es nicht,
+und der Grund ist die Nahtgeometrie selbst.
+
+### Warum die Ausrichtung nicht eindeutig ist
+
+**Ein V koppelt Spaltbreite und Höhe.** Anhand der Flanken allein lässt sich
+nicht unterscheiden, ob der Spalt breiter ist oder ob das Bauteil höher liegt —
+bei 45°-Flanken ist beides geometrisch dasselbe. Es ist dieselbe Kopplung
+`dw/dz = 2·tan(α)`, die in Abschnitt 5.2 die Messverstärkung verursacht.
+
+Ist der Spalt im Scan breiter als im CAD, passen die Flanken folglich besser
+zusammen, wenn die Ausrichtung den Scan **anhebt** — dort ist das CAD-V weiter.
+Die Flanken drängen also auf einen Höhenversatz.
+
+**Dagegen hält die Werkstückoberseite.** Sie ist horizontal, legt die Höhe
+unmittelbar fest und stellt die große Mehrheit der Punkte — beim Referenzbauteil
+rund 437.000 gegenüber 67.000 auf beiden Flanken. Was die Ausrichtung
+schließlich tut, ist das Gleichgewicht dieser beiden Ansprüche.
+
+Messbar ist das deutlich: Über die Translationsserie wächst der Höhenversatz
+streng linear mit der Spaltabweichung (Korrelation 0.9997), mit einem Verhältnis
+von rund 0.038 mm Höhe je mm Spalt. Eine überschlägige Rechnung aus den
+Punktzahlen liefert dieselbe Größenordnung.
+
+**Folge für die Spaltmessung.** Die Ausrichtung verschiebt damit ausgerechnet
+die Größe, die anschließend gemessen werden soll — und zwar umso mehr, je größer
+die Abweichung ist. Wird gegen eine feste Höhe im Koordinatensystem ausgewertet,
+geht dieser Versatz verstärkt in das Ergebnis ein (Abschnitt 5.2).
+
+Die `2·tan(α)`-Kopplung tritt im System also zweimal auf: einmal als
+Mehrdeutigkeit bei der Ausrichtung, einmal als Verstärkung bei der Messung. Die
+Verankerung durchbricht diesen Kreis, weil sie den Höhenbezug aus der
+Werkstückoberseite nimmt — der einzigen beteiligten Fläche, deren Lage nicht von
+der Spaltbreite abhängt.
 
 **Nur ICP, keine PCA-Grobausrichtung.** Eine Hauptachsentransformation als
 Vorstufe ist der übliche Weg, scheitert hier aber an der Bauteilgeometrie: Das

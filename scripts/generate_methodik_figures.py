@@ -258,7 +258,7 @@ def figure_amplification(path: Path):
         # der Text auf der Soll-Höhen-Linie.
         ax.text(x_depth + 0.5,
                 z_anchor - 0.2 if anchored else z_anchor + 0.15, anchor_txt,
-                color=farbe, fontsize=8.5,
+                color=farbe, fontsize=8.5, weight="bold",
                 va="top" if anchored else "bottom")
 
         # Auswertungshöhe und gemessene Spaltbreite

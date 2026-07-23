@@ -181,13 +181,15 @@ def figure_cross_section(path: Path):
     y_b = +(ROOT_GAP / 2 + (THICK - d_root) * TAN_A)
     ax.annotate("", xy=(y_b, -d_root), xytext=(y_a, -d_root),
                 arrowprops=dict(arrowstyle="<->", color=C_REF, lw=2.0))
+    # Text tiefer und der Hinweispfeil schraeg: waagerecht lief er auf Hoehe
+    # des Flankenendes und ging dort optisch unter.
     ax.annotate("Spalt = Differenz der\nbeiden Flankenprofile",
-                xy=(0.6, -d_root), xytext=(5.6, -THICK - 0.35),
-                color=C_REF, fontsize=9, ha="center", weight="bold",
-                arrowprops=dict(arrowstyle="->", color=C_REF, lw=1.0))
+                xy=(0.0, -d_root - 0.08), xytext=(4.4, -THICK - 0.75),
+                color=C_REF, fontsize=9, ha="center", va="top", weight="bold",
+                arrowprops=dict(arrowstyle="->", color=C_REF, lw=1.1))
 
     ax.set_xlim(-x_lim, x_lim)
-    ax.set_ylim(-THICK - 1.1, 1.15)
+    ax.set_ylim(-THICK - 1.9, 1.15)
     ax.set_aspect("equal")
     _style(ax, "Y — Spalt-Querrichtung (mm)", "Z (mm)")
     ax.set_title("Spaltmessung an der Werkstückoberseite im Querschnitt",

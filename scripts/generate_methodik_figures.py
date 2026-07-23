@@ -35,8 +35,10 @@ C_GUIDE = "#B0BEC5"
 C_BODY = "#CFD8DC"
 C_BAD = "#E53935"
 
-# Nahtgeometrie (schematisch)
-ROOT_GAP = 2.0
+# Nahtgeometrie (schematisch) – Wurzelspalt und Blechdicke wie beim
+# Referenzbauteil Baugruppe_Beispielteil_V-Naht_1.5mm_Spalt.
+# Wichtig: die Flanken laufen NICHT spitz zu, sie enden am Wurzelspalt.
+ROOT_GAP = 1.5
 THICK = 5.0
 ALPHA = 45.0
 HALF_W = 18.0
@@ -192,60 +194,99 @@ def figure_cross_section(path: Path):
 # ── Bild 3: Verstärkungseffekt ────────────────────────────────────────
 
 def figure_amplification(path: Path):
+    """Warum eine feste Auswertungshöhe den Spalt verfälscht.
+
+    Beide Panels zeigen DASSELBE Bauteil in derselben (um dz zu hoch
+    registrierten) Lage. Unterschiedlich ist allein, woran die
+    Auswertungshöhe hängt – und damit, in welcher TIEFE im Bauteil
+    geschnitten wird. Genau diese Tiefe ist deshalb in beiden Panels
+    bemaßt: sie ist der Mechanismus, nicht die Lage der Linie.
+    """
     dz = 0.6
-    d_eval = 3.0   # bewusst nicht an der Wurzel: dort kreuzen sich die
-                   # Flanken bei festem Bezug, was das Bild unleserlich macht
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), dpi=DPI, sharey=True)
+    # Ausgewertet wird an der WURZEL – die Groesse, die das Verfahren liefert.
+    # Das Bauteil ist hier um dz zu TIEF registriert; dadurch bleiben beide
+    # Schnitte im Material. (Bei zu hoher Lage laege der feste Schnitt
+    # unterhalb der Wurzel, also ausserhalb des Bauteils.)
+    d_nom = THICK
+    z_deck = -dz   # gemessene Deckfläche, um dz zu tief
+    x_depth = 7.2
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 5.0), dpi=DPI, sharey=True)
 
     def draw(ax, anchored):
-        # Soll-Lage (blass) und tatsächlich registrierte Lage (um dz angehoben)
-        for shift, alpha, lw in ((0.0, 0.25, 1.2), (dz, 1.0, 2.6)):
-            for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
-                y, z = _flank_xy(sign, 0.0, THICK)
-                ax.plot(y, z + shift, color=c, linewidth=lw, alpha=alpha,
-                        zorder=8 if shift else 4)
-            ax.axhline(shift, color=C_REF, linewidth=2.0 if shift else 1.0,
-                       alpha=1.0 if shift else 0.3, zorder=6 if shift else 3)
+        # Soll-Höhe der Deckfläche (wo das Bauteil liegen sollte)
+        ax.axhline(0, color=C_GUIDE, linestyle=":", linewidth=1.3, zorder=2)
+        # Tatsächlich gemessene Deckfläche
+        ax.axhline(z_deck, color=C_REF, linewidth=2.2, zorder=6)
+        for sign, c in ((-1, C_FLANK_A), (+1, C_FLANK_B)):
+            y, z = _flank_xy(sign, 0.0, THICK)
+            ax.plot(y, z + z_deck, color=c, linewidth=2.8, zorder=8)
 
         if anchored:
-            # Auswertungshöhe folgt der verschobenen Deckfläche: die Tiefe im
-            # Bauteil bleibt d_eval, unabhängig von dz.
-            z_eval = dz - d_eval
-            half = ROOT_GAP / 2 + (THICK - d_eval) * TAN_A
+            z_anchor = z_deck                # Bezug: Deckfläche des Bauteils
+            z_eval = z_deck - d_nom
             farbe, titel = C_REF, "verankert an der Deckfläche"
-            note = "Auswertungshöhe folgt dem Bauteil\n→ Spalt unverändert"
+            anchor_txt = "Bezug:\nDeckfläche"
+            mess_txt = "= Wurzelspalt"
+            note = ("Bezug wandert mit dem Bauteil\n"
+                    "→ Schnitt trifft die Wurzel, Spalt korrekt")
         else:
-            # Feste Höhe: das um dz angehobene Bauteil wird dort um dz TIEFER
-            # angeschnitten (d_eff = d_eval + dz). Im nach oben breiter
-            # werdenden V heisst tiefer = schmaler -> Fehler = -2*dz.
-            z_eval = -d_eval
-            half = ROOT_GAP / 2 + (THICK - (d_eval + dz)) * TAN_A
+            z_anchor = 0.0                   # Bezug: Koordinatensystem
+            z_eval = -d_nom
             farbe, titel = C_BAD, "feste Auswertungshöhe"
-            note = (f"Bauteil wandert um dz = {dz} mm nach oben\n"
-                    f"→ Spalt um 2·dz = {2*dz} mm zu klein")
+            anchor_txt = "Bezug:\nz = 0"
+            mess_txt = "nicht die Wurzel"
+            note = (f"Bezug bleibt bei z = 0, das Bauteil sitzt tiefer\n"
+                    f"→ Schnitt nur {THICK - dz:.1f} mm tief statt {THICK:.1f} — "
+                    f"Spalt 2·dz = {2 * dz:.1f} mm zu breit")
 
+        d_actual = z_deck - z_eval
+        half = ROOT_GAP / 2 + (THICK - d_actual) * TAN_A
+
+        # Kernaussage: gleiche Bemaßung, unterschiedlicher Startpunkt.
+        ax.plot([x_depth - 0.6, x_depth + 0.6], [z_anchor, z_anchor],
+                color=farbe, linewidth=2.0, zorder=9)
+        ax.annotate("", xy=(x_depth, z_eval), xytext=(x_depth, z_anchor),
+                    arrowprops=dict(arrowstyle="<->", color=farbe, lw=1.8))
+        ax.text(x_depth + 0.5, (z_anchor + z_eval) / 2, f"{d_nom:.1f} mm",
+                color=farbe, fontsize=10, va="center", weight="bold")
+        ax.text(x_depth + 0.5, z_anchor + 0.15, anchor_txt,
+                color=farbe, fontsize=8.5, va="bottom")
+
+        # Auswertungshöhe und gemessene Spaltbreite
         ax.axhline(z_eval, color=farbe, linestyle="--", linewidth=1.8, zorder=7)
         ax.annotate("", xy=(half, z_eval), xytext=(-half, z_eval),
                     arrowprops=dict(arrowstyle="<->", color=farbe, lw=2.2))
-        ax.text(0, z_eval + 0.45, f"gemessen: {2*half:.1f} mm", color=farbe,
-                fontsize=11, ha="center", weight="bold")
-        ax.text(0.5, 0.04, note, transform=ax.transAxes, fontsize=9,
+        ax.text(half + 0.55, z_eval, f"{2 * half:.1f} mm\n{mess_txt}", color=farbe,
+                fontsize=10.5, ha="left", va="center", weight="bold",
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="none", alpha=0.9))
+
+        ax.text(0.5, 0.03, note, transform=ax.transAxes, fontsize=8.5,
                 ha="center", color=farbe,
                 bbox=dict(boxstyle="round,pad=0.35", facecolor="white",
                           edgecolor=farbe, alpha=0.95))
-        ax.set_title(titel, fontsize=12, color=farbe, weight="bold")
-        ax.set_xlim(-9.5, 9.5)
-        ax.set_ylim(-THICK - 1.6, 1.8)
+        ax.set_title(titel, fontsize=12, color=farbe, weight="bold", pad=8)
+        ax.set_xlim(-9.8, 11.0)
+        ax.set_ylim(-THICK - 3.4, 1.5)
         ax.set_aspect("equal")
         _style(ax, "Y — Spalt-Querrichtung (mm)", "")
 
     draw(axes[0], anchored=False)
     draw(axes[1], anchored=True)
     axes[0].set_ylabel("Z (mm)")
+    # Nur im linken Panel beschriften – rechts ist die Lage dieselbe.
+    axes[0].text(-9.6, 0.45, "Soll-Höhe der Deckfläche",
+                 color="#8A9AA5", fontsize=8.5)
+    # Schmal gesetzt: breiter Text würde in Flanke A hineinlaufen.
+    axes[0].text(-9.6, -1.5, f"gemessene\nDeckfläche\n({dz} mm zu tief)",
+                 color=C_REF, fontsize=8.5, weight="bold", va="top",
+                 linespacing=1.4)
     fig.suptitle(
-        "Wirkung eines Registrierungs-Höhenversatzes dz auf die Spaltmessung",
-        fontsize=13)
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+        "Beide Seiten: dasselbe Bauteil, um dz zu tief registriert — "
+        "nur der Bezug der Auswertungshöhe unterscheidet sich",
+        fontsize=12.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
 

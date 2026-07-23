@@ -215,9 +215,12 @@ bei künftigen Bauteilen mit anderer Nahtvorbereitung neu zu bewerten ist.
 
 ![Verstärkungseffekt](figures/03_verstaerkungseffekt.png)
 
-*Links: Bei fester Auswertungshöhe wandert das um `dz` verschobene Bauteil unter
-der Schnittebene hindurch, der Spalt wird um `2·dz` falsch gemessen. Rechts: Die
-verankerte Auswertungshöhe folgt dem Bauteil, der Spalt bleibt unverändert.*
+*Beide Seiten zeigen dasselbe Bauteil, um `dz` = 0.6 mm zu tief registriert.
+Gemessen wird jeweils 5 mm unter dem Bezug — links ab der Nullebene des
+Koordinatensystems, rechts ab der Deckfläche des Bauteils. Links liegt der
+Schnitt dadurch nur 4.4 mm tief im Material und trifft die Wurzel nicht: 2.7 mm
+statt 1.5 mm, also `2·dz` = 1.2 mm zu breit. Rechts wandert der Bezug mit dem
+Bauteil, der Schnitt trifft die Wurzel und liefert den korrekten Wert.*
 
 ### 5.3 Die Verankerung
 

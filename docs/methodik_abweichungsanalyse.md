@@ -254,11 +254,31 @@ Anlass.
 **Die Abhängigkeit ist verlagert, nicht beseitigt.** Der Verstärkungsfaktor
 gilt jetzt für Fehler der Referenzebene selbst: Liegt der Ebenenfit um δ
 daneben, geht δ mit demselben Faktor `2·tan(α)` ein. Die Genauigkeit der
-Spaltmessung hängt damit an der Qualität dieser Ebene. Bei synthetischen Daten
-ist das unkritisch; bei realen Scans sitzen auf der Werkstückoberseite Spritzer und
-Reflexionen. Die Ebenenbestimmung ist deshalb ausreißerrobust ausgelegt, gibt
-Gütemaße mit aus und verweigert die Auswertung, wenn die Werkstückoberseite zu stark
-gestört ist — lieber kein Wert als ein falscher Bezug.
+Spaltmessung hängt damit an der Qualität dieser Ebene. Bei realen Scans sitzen
+auf der Werkstückoberseite Spritzer und Reflexionen. Die Ebenenbestimmung ist
+deshalb ausreißerrobust ausgelegt, gibt Gütemaße mit aus und verweigert die
+Auswertung, wenn die Werkstückoberseite zu stark gestört ist — lieber kein Wert
+als ein falscher Bezug.
+
+**Ein systematischer Anteil von δ ist bekannt: die Ebene sitzt minimal zu
+tief.** Als Background zählt alles innerhalb der Toleranzbreite um die Ebene.
+Am Übergang zur Fase fallen dadurch Flankenpunkte in dieses Band — aber nur
+*unterhalb* der Oberfläche, denn darüber ist nichts. Die Punktverteilung ist
+also einseitig, und weil der Ebenenfit den Mittelwert seiner Inlier trifft,
+zieht dieser einseitige Anteil die Ebene nach unten.
+
+Gemessen an den synthetischen Scans: 99.2 % der Punkte liegen exakt auf der
+Oberfläche, 0.8 % darunter, keiner darüber. Die gefittete Ebene liegt
+**0.001 mm** unter der wahren Oberfläche — exakt auf dem Mittelwert der
+Punkte, nicht auf ihrem Median.
+
+Der Betrag ist hier bedeutungslos (0.4 % der Toleranz, selbst mit Faktor 2).
+Der Mechanismus ist aber systematisch und wird bei realen Scans größer, wo der
+Übergangsbereich einen höheren Anteil der Punkte stellt. Messrauschen wirkt
+demgegenüber symmetrisch und erzeugt keinen Versatz — der Beitrag kommt allein
+aus der Einseitigkeit der Geometrie. Wer ihn beseitigen will, hat zwei Wege:
+das Band für den Ebenenfit enger fassen als für die Klassifikation, oder statt
+des Mittelwerts ein oberes Quantil verwenden.
 
 ### 5.4 Zwei getrennte Flankenprofile
 

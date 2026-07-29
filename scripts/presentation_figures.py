@@ -26,6 +26,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,23 +62,142 @@ C_CAD = "#c3c2b7"
 
 VMAX = 2.0   # gemeinsame, symmetrische Farbgrenze über alle Fälle (mm)
 
+# Achsenkonvention wie im Rest der Doku: X = Naht-Längsrichtung, Y =
+# Spalt-Querrichtung, Z = Höhe. Jeder Fall nennt die verstellte Achse.
+# fault_kind steuert die 3D-Schemaskizze.
 CASES = [
-    ("T_X_+00.100mm", "Sauberes Teil", "0.1 mm längs verschoben"),
-    ("R_X_+02.000deg", "Verkipptes Teil", "ein Werkstück um 2° gekippt"),
-    ("C_TR_08", "Deutliche Fehlstellung", "1 mm Höhenversatz + 1° Verkippung"),
+    ("T_X_+05.000mm", "Verschobenes Teil", "shift_x",
+     "5 mm in X verschoben (längs der Naht) — Abweichung nur an den Enden"),
+    ("R_Y_+01.000deg", "Verkipptes Teil", "tilt_y",
+     "1° um die Y-Achse gekippt (Spalt-Querachse)"),
+    ("R_Z_+01.000deg", "Verdrehtes Teil", "yaw_z",
+     "1° um die Z-Achse gedreht — der Spalt öffnet sich keilförmig"),
 ]
 FOOTER = "Synthetische Daten"
 
 
 def _plate_axes(ax):
     ax.set_aspect("equal")
-    ax.set_xlabel("Naht-Längsrichtung (mm)", fontsize=9, color=INK2)
-    ax.set_ylabel("quer (mm)", fontsize=9, color=INK2)
+    ax.set_xlabel("X — Naht-Längsrichtung (mm)", fontsize=9, color=INK2)
+    ax.set_ylabel("Y — quer (mm)", fontsize=9, color=INK2)
     ax.tick_params(colors=MUTED, labelsize=8)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
         ax.spines[s].set_color(GRID)
+
+
+# ── 3D-Schemaskizze: welche Achse wurde verstellt ─────────────────────
+
+# Schematische, überhöhte Bauteilmaße (einheitenlos). Naht läuft in X, die
+# beiden Werkstücke sind in Y durch den Spalt getrennt, Dicke in Z.
+_LX, _WY, _GAP, _TZ = 100.0, 30.0, 7.0, 8.0
+C_WP_A = "#c3ccd4"   # Werkstück A (fest)
+C_WP_B = "#9fb0bd"   # Werkstück B (verstellt)
+
+
+def _box_polys(x0, x1, y0, y1, z0, z1, tf):
+    """Sechs Quad-Flächen eines Quaders, Ecken durch tf transformiert."""
+    pts = np.array([tf(np.array([x, y, z], float))
+                    for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)])
+    i = lambda ix, iy, iz: ix * 4 + iy * 2 + iz
+    faces = [
+        [i(0, 0, 0), i(0, 1, 0), i(0, 1, 1), i(0, 0, 1)],
+        [i(1, 0, 0), i(1, 1, 0), i(1, 1, 1), i(1, 0, 1)],
+        [i(0, 0, 0), i(1, 0, 0), i(1, 0, 1), i(0, 0, 1)],
+        [i(0, 1, 0), i(1, 1, 0), i(1, 1, 1), i(0, 1, 1)],
+        [i(0, 0, 0), i(1, 0, 0), i(1, 1, 0), i(0, 1, 0)],
+        [i(0, 0, 1), i(1, 0, 1), i(1, 1, 1), i(0, 1, 1)],
+    ]
+    return [pts[f] for f in faces]
+
+
+def _rot_y_about(theta_deg, xp, zp):
+    """Drehung um eine zu Y parallele Achse durch (xp, ·, zp)."""
+    t = np.radians(theta_deg)
+    c, s = np.cos(t), np.sin(t)
+
+    def tf(p):
+        x, y, z = p
+        x, z = x - xp, z - zp
+        return np.array([x * c + z * s + xp, y, -x * s + z * c + zp])
+    return tf
+
+
+def _rot_z_about(theta_deg, xp, yp):
+    """Drehung um eine zu Z parallele Achse durch (xp, yp, ·) — Yaw."""
+    t = np.radians(theta_deg)
+    c, s = np.cos(t), np.sin(t)
+
+    def tf(p):
+        x, y, z = p
+        x, y = x - xp, y - yp
+        return np.array([x * c - y * s + xp, x * s + y * c + yp, z])
+    return tf
+
+
+def _draw_slab(ax, y0, y1, color, tf):
+    polys = _box_polys(-_LX / 2, _LX / 2, y0, y1, 0, _TZ, tf)
+    ax.add_collection3d(Poly3DCollection(
+        polys, facecolor=color, edgecolor=INK2, linewidths=0.7, alpha=0.96))
+
+
+def draw_fault_schematic(ax, kind: str):
+    """Zwei Werkstücke; B (unten, y<0) trägt die überhöhte Fehlstellung."""
+    ident = lambda p: p
+    # Werkstück A (fest, oben, y>0)
+    _draw_slab(ax, _GAP / 2, _GAP / 2 + _WY, C_WP_A, ident)
+
+    # Werkstück B (unten, y<0) mit Fehlstellung, deutlich überhöht
+    yb0, yb1 = -_GAP / 2 - _WY, -_GAP / 2
+    dx_shift = 20.0
+    if kind == "clean":
+        _draw_slab(ax, yb0, yb1, C_WP_B, ident)
+    elif kind == "shift_x":
+        _draw_slab(ax, yb0, yb1, C_WP_B,
+                   lambda p: p + np.array([dx_shift, 0, 0]))
+    elif kind == "tilt_y":
+        _draw_slab(ax, yb0, yb1, C_WP_B, _rot_y_about(15, 0, _TZ / 2))
+    elif kind == "yaw_z":
+        # Drehung um Z am rechten Nahtende: das linke Ende schwenkt in Y aus,
+        # der Spalt öffnet sich keilförmig.
+        _draw_slab(ax, yb0, yb1, C_WP_B, _rot_z_about(11, _LX / 2, yb1))
+
+    # Koordinatensystem an der vorderen unteren Ecke
+    ox, oy, oz = -_LX / 2 - 8, yb0 - 8, 0
+    triad = [((38, 0, 0), "X"), ((0, 22, 0), "Y"), ((0, 0, 20), "Z")]
+    for (u, v, w), name in triad:
+        ax.quiver(ox, oy, oz, u, v, w, color=INK, arrow_length_ratio=0.16,
+                  linewidth=1.6)
+        ax.text(ox + u * 1.14, oy + v * 1.16, oz + w * 1.16, name,
+                fontsize=11, color=INK, weight="bold", ha="center", va="center")
+
+    # Drehachse markieren
+    if kind in ("tilt_y", "raise_tilt_y"):
+        ax.plot([0, 0], [yb0 - 6, _GAP / 2 + _WY], [_TZ / 2, _TZ / 2],
+                color=C_EXCESS, linewidth=1.8, linestyle=(0, (4, 2)), zorder=10)
+        ax.text(6, _GAP / 2 + _WY + 2, _TZ / 2 + 6, "Drehachse Y",
+                fontsize=8.5, color=C_EXCESS, weight="bold", ha="left")
+    elif kind == "yaw_z":
+        ax.plot([_LX / 2, _LX / 2], [yb1, yb1], [0, _TZ + 20],
+                color=C_EXCESS, linewidth=1.8, linestyle=(0, (4, 2)), zorder=10)
+        ax.text(_LX / 2 + 2, yb1, _TZ + 22, "Drehachse Z", fontsize=8.5,
+                color=C_EXCESS, weight="bold", ha="left")
+    elif kind == "shift_x":
+        # roter Richtungspfeil der Translation, parallel zu +X über B,
+        # rechts der Z-Achse beginnend, damit nichts überlappt
+        yc = (yb0 + yb1) / 2
+        ax.quiver(0, yc, _TZ + 9, 34, 0, 0, color=C_EXCESS,
+                  arrow_length_ratio=0.26, linewidth=2.4, zorder=11)
+        ax.text(0, yc, _TZ + 16, "verschoben in X", fontsize=8.5,
+                color=C_EXCESS, weight="bold", ha="left", va="bottom")
+
+    ax.set_box_aspect((_LX, 2 * _WY + _GAP, 36))
+    ax.view_init(elev=20, azim=-62)
+    ax.set_axis_off()
+    ax.set_xlim(-_LX / 2 - 10, _LX / 2 + 24)
+    ax.set_ylim(yb0 - 12, _GAP / 2 + _WY + 4)
+    ax.set_zlim(0, 32)
 
 
 def _footer(fig):
@@ -88,50 +208,45 @@ def _footer(fig):
 # ── Bild 1: Abweichungs-Farbkarte ─────────────────────────────────────
 
 def figure_deviation_map(cad, path: Path):
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8.4), dpi=DPI)
-    fig.subplots_adjust(left=0.06, right=0.83, top=0.87, bottom=0.11,
-                        wspace=0.18, hspace=0.52)
+    fig = plt.figure(figsize=(13.5, 12.8), dpi=DPI)
+    fig.subplots_adjust(left=0.03, right=0.86, top=0.85, bottom=0.05,
+                        hspace=0.42, wspace=0.04)
     norm = TwoSlopeNorm(vcenter=0.0, vmin=-VMAX, vmax=VMAX)
 
-    def _panel_title(ax, main, sub=None):
-        ax.set_title(main, fontsize=11, color=INK, weight="bold", pad=24)
-        if sub:
-            ax.text(0.5, 1.03, sub, transform=ax.transAxes, ha="center",
-                    va="bottom", fontsize=8.5, color=MUTED)
+    # Spaltenüberschriften
+    fig.text(0.24, 0.925, "Was verstellt wurde", ha="center", fontsize=12,
+             color=INK, weight="bold")
+    fig.text(0.24, 0.910, "Schema, Fehlstellung überhöht", ha="center",
+             fontsize=8.5, color=MUTED)
+    fig.text(0.64, 0.925, "Was die Messung sieht", ha="center", fontsize=12,
+             color=INK, weight="bold")
+    fig.text(0.64, 0.910, "Draufsicht auf die XY-Ebene", ha="center",
+             fontsize=8.5, color=MUTED)
 
-    # (0,0) CAD-Ideal als Soll-Silhouette (Oberseite, ein Ton)
-    ax = axes[0, 0]
-    top = cad.points[cad.top_mask]
-    sel = subsample(len(top), 30000, seed=1)
-    ax.scatter(top[sel, 0], top[sel, 1], s=2, c=C_CAD, marker="s",
-               linewidths=0, rasterized=True)
-    _panel_title(ax, "CAD-Ideal (So soll es sein)",
-                 "durchgehender Spalt, keine Abweichung")
-    _plate_axes(ax)
-
-    # drei Scans, gemeinsame Farbskala
     mappable = None
-    for ax, (case, title, sub) in zip(axes.flat[1:], CASES):
+    for r, (case, title, fault, sub) in enumerate(CASES):
+        ax3 = fig.add_subplot(3, 2, 2 * r + 1, projection="3d")
+        draw_fault_schematic(ax3, fault)
+
+        axm = fig.add_subplot(3, 2, 2 * r + 2)
         field = signed_distance_field(OUTPUTS / case, cad)
         sel = subsample(len(field.points), 45000, seed=2)
         p, d = field.points[sel], field.signed[sel]
-        # nach |d| sortiert: die Abweichungen kommen zuoberst zu liegen
         order = np.argsort(np.abs(d))
-        mappable = ax.scatter(p[order, 0], p[order, 1], c=d[order], cmap=DEV_CMAP,
-                              norm=norm, s=2, marker="s", linewidths=0,
-                              rasterized=True)
+        mappable = axm.scatter(p[order, 0], p[order, 1], c=d[order],
+                               cmap=DEV_CMAP, norm=norm, s=2, marker="s",
+                               linewidths=0, rasterized=True)
         rate = field.in_tolerance_rate * 100
-        _panel_title(ax, f"{title} — {rate:.0f} % in Toleranz", sub)
-        _plate_axes(ax)
+        axm.set_title(f"{title} — {rate:.0f} % in Toleranz", fontsize=12,
+                      color=INK, weight="bold", pad=14)
+        axm.text(0.5, 1.02, sub, transform=axm.transAxes, ha="center",
+                 va="bottom", fontsize=8.7, color=MUTED)
+        _plate_axes(axm)
 
     fig.suptitle("Abweichung zum CAD-Ideal — Scan eingefärbt nach Abstand",
-                 fontsize=15, weight="bold", color=INK, y=0.965)
+                 fontsize=15, weight="bold", color=INK, y=0.975)
 
-    # gemeinsame Farbleiste rechts, eigenes Achsenobjekt (kollidiert nicht)
-    cax = fig.add_axes([0.865, 0.16, 0.016, 0.56])
-    # Kein Achsentitel: die Laien-Endlabels (fehlt / in Toleranz / steht über)
-    # erklären die Skala vollständig, "signierter Abstand" wäre Fachjargon und
-    # kreuzte die Beschriftung.
+    cax = fig.add_axes([0.895, 0.30, 0.015, 0.40])
     cbar = fig.colorbar(mappable, cax=cax, extend="both")
     cbar.ax.tick_params(colors=MUTED, labelsize=8)
     cbar.ax.axhspan(-TOLERANCE_MM, TOLERANCE_MM, facecolor="none",

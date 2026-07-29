@@ -225,12 +225,22 @@ fig.tight_layout()"""),
 
     MD("""## Befunde
 
-**Der Restfehler der Spaltmessung hat Struktur.** Über die 39 Fälle mit
-vollständigem Sollmodell liegt der Median bei −0.0093 mm. Die 26 reinen
-Translationsfälle streuen darum praktisch nicht — der Wert ist dort auf vier
-Nachkommastellen identisch. Die Rotationsfälle streuen mit ±0.05 mm rund
-fünfmal so weit. Der Restfehler ist also kein Rauschen, sondern ein konstanter
-Versatz plus ein rotationsabhängiger Anteil.
+**Der Restfehler der Spaltmessung hat Struktur — aber erst nach Abzug der
+Geometrie.** Der ausgegebene Wurzelspalt wird auf `d_root` gemessen, das
+oberhalb der echten Wurzel liegt; die dort abgelesene Breite ist deshalb um
+`(5 mm − d_root)·2·tan(α)` grösser als das Nennmass — über die Serie 0.49 mm
+bis 5.18 mm, je nach Fehlstellung. Das ist die V-Naht-Geometrie, kein
+Messfehler, und es steckt bereits im Sollmodell aus Abschnitt 1. Erst *nach*
+diesem Abzug bleibt der eigentliche Restfehler: über die 39 Fälle mit
+vollständigem Sollmodell ein Median von **−0.0093 mm**. Die 26 reinen
+Translationsfälle streuen darum praktisch nicht — auf vier Nachkommastellen
+identisch. Die Rotationsfälle streuen mit ±0.05 mm rund fünfmal so weit. Der
+Restfehler ist also kein Rauschen, sondern ein konstanter Versatz plus ein
+rotationsabhängiger Anteil.
+
+Wichtig für die Weiterverarbeitung: Die Spaltbreite ist ohne die zugehörige
+Tiefe `d_root` nicht interpretierbar. Ein direkter Vergleich des Zahlenwerts
+mit 1.5 mm läge schon im günstigsten Fall um das Doppelte der Toleranz daneben.
 
 **Die einzelnen Flankenwinkel taugen nicht als Merkmal, ihre Summe schon.**
 Bei aufgeprägter Querverkippung wandern beide Winkel, und zwar im Verhältnis

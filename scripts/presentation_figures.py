@@ -234,7 +234,7 @@ def draw_fault_schematic(ax, kind: str):
 
 
 def _footer(fig):
-    fig.text(0.5, 0.012, FOOTER, ha="center", fontsize=8.5, color=MUTED,
+    fig.text(0.5, 0.012, FOOTER, ha="center", fontsize=9, color=INK,
              style="italic")
 
 
@@ -340,24 +340,25 @@ def figure_three_levels(cad, path: Path):
         bg.text(cx(i), header_y, htext, ha="center", fontsize=15.5,
                 weight="bold", color=INK)
 
-    # ── Kasten 0: Schemaskizze ───────────────────────────────────────
+    # ── Kasten 0: Schemaskizze (innerhalb der Kastengrenzen) ─────────
     x, y, w, h = cards[0]
-    ax3 = fig.add_axes([x - 0.01, 0.15, w + 0.02, 0.55], projection="3d")
+    ax3 = fig.add_axes([x + 0.004, 0.30, w - 0.008, 0.42], projection="3d")
     draw_fault_schematic(ax3, "yaw_z_shift_x")
-    bg.text(cx(0), 0.145, "Werkstück um Z gedreht\nund in X verschoben.",
-            ha="center", va="top", fontsize=12.5, color=INK2)
+    bg.text(cx(0), 0.25, "Werkstück um Z gedreht\nund in X verschoben.",
+            ha="center", va="top", fontsize=12.5, weight="bold", color=INK)
 
     # ── Kasten 1: globaler Kennwert ──────────────────────────────────
     bg.text(cx(1), 0.55, f"{rate:.0f} %", ha="center", va="center",
             fontsize=54, weight="bold", color=C_BAD)
-    bg.text(cx(1), 0.445, "in Toleranz", ha="center", fontsize=15, color=INK)
+    bg.text(cx(1), 0.445, "in Toleranz", ha="center", fontsize=15,
+            weight="bold", color=INK)
     x, y, w, h = cards[1]
     bx, bw, by = x + 0.022, w - 0.044, 0.37
     bg.add_patch(plt.Rectangle((bx, by), bw, 0.026, color="#d5dae0"))
     bg.add_patch(plt.Rectangle((bx, by), bw * rate / 100, 0.026, color=C_BAD))
     bg.text(cx(1), 0.30, "Anteil der Fläche innerhalb\n±0.25 mm — ein Skalar\n"
             "ohne räumliche Auflösung.", ha="center", va="top", fontsize=12.5,
-            color=INK2)
+            color=INK)
 
     # ── Kasten 2: Voxelkarte ─────────────────────────────────────────
     x, y, w, h = cards[2]
@@ -374,30 +375,28 @@ def figure_three_levels(cad, path: Path):
     axv.set_aspect("equal"); axv.set_axis_off()
     bg.text(cx(2), 0.285, "Mittlerer Abstand je 5-mm-Würfel —\n"
             "lokalisiert die Abweichung.", ha="center", va="top",
-            fontsize=12.5, color=INK2)
+            fontsize=12.5, color=INK)
     bg.text(cx(2), 0.17, "rot: Material steht über   ·   blau: fehlt",
-            ha="center", fontsize=12, color=INK2)
+            ha="center", fontsize=12, weight="bold", color=INK)
 
     # ── Kasten 3: sechs Freiheitsgrade ───────────────────────────────
     x, y, w, h = cards[3]
     bg.text(cx(3), 0.66, "Relativlage der Werkstücke, aus der Registrierung",
-            ha="center", fontsize=11.5, color=INK2)
+            ha="center", fontsize=11.5, color=INK)
     col_t, col_r = x + 0.03, x + 0.145
-    bg.text(col_t, 0.585, "Translation", fontsize=12, color=INK2, weight="bold")
-    bg.text(col_r, 0.585, "Rotation", fontsize=12, color=INK2, weight="bold")
+    bg.text(col_t, 0.585, "Translation", fontsize=12, color=INK, weight="bold")
+    bg.text(col_r, 0.585, "Rotation", fontsize=12, color=INK, weight="bold")
     dof = [("Tx", tr["x"], "mm"), ("Ty", tr["y"], "mm"), ("Tz", tr["z"], "mm"),
            ("Rx", rot["x"], "°"), ("Ry", rot["y"], "°"), ("Rz", rot["z"], "°")]
     for k, (name, val, unit) in enumerate(dof):
         col = col_t if k < 3 else col_r
         yy = 0.50 - (k % 3) * 0.115
-        active = abs(val) > 0.05
-        disp = val if active else 0.0        # kein "-0.00"
-        # Nullwerte gedämpft, aber lesbar (dunkles Grau, nicht Hellgrau)
-        c_val = INK if active else INK2
-        wt = "bold" if active else "normal"
-        bg.text(col, yy, name, fontsize=13, color=INK2, weight="bold")
+        disp = 0.0 if abs(val) < 0.005 else val    # kein "-0.00"
+        # alles schwarz; nur die echten Fehler (>0.1) fett, der Rest normal
+        wt = "bold" if abs(val) > 0.1 else "normal"
+        bg.text(col, yy, name, fontsize=13, color=INK, weight="bold")
         bg.text(col + 0.028, yy, f"{disp:+.2f} {unit}", fontsize=15,
-                color=c_val, weight=wt)
+                color=INK, weight=wt)
 
     fig.suptitle("Drei Auswertungsebenen am selben Bauteil — Drehung um Z "
                  "und Verschiebung in X", fontsize=16, weight="bold",

@@ -66,8 +66,7 @@ CASES = [
     ("R_X_+02.000deg", "Verkipptes Teil", "ein Werkstück um 2° gekippt"),
     ("C_TR_08", "Deutliche Fehlstellung", "1 mm Höhenversatz + 1° Verkippung"),
 ]
-FOOTER = ("Geometrisch validiert an 61 synthetischen Fällen · "
-          "reale CMM-Scans sind der nächste Schritt")
+FOOTER = "Synthetische Daten"
 
 
 def _plate_axes(ax):

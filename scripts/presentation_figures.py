@@ -9,6 +9,12 @@ Methodik-Erklärung lesbar sein. Drei Bilder:
   2. C_TR_08-Dreiklang: warum es drei Auswertungsebenen braucht
   3. Vorher-Nachher der Verankerung: Anteil in Toleranz und RMS
 
+Bild 2 nutzt den eigens erzeugten Fall C_ZX_01 (Drehung um Z + Verschiebung in
+X). Der liegt nicht im Standard-Datensatz — vorher einmalig erzeugen:
+    uv run python scripts/generate_rztx_demo.py
+    uv run python scripts/run_batch_subtraction.py \\
+        --scan-dir data/raw/_rztx_demo --source-type synthetic
+
 Aufruf:  uv run python scripts/presentation_figures.py
 Ausgabe: docs/figures/praesentation/*.png (dpi=200)
 
@@ -26,6 +32,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib.patches import FancyBboxPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
 
@@ -151,11 +158,20 @@ def draw_fault_schematic(ax, kind: str):
     # Werkstück B (unten, y<0) mit Fehlstellung, deutlich überhöht
     yb0, yb1 = -_GAP / 2 - _WY, -_GAP / 2
     dx_shift = 20.0
+    d_xyz = np.array([16.0, -9.0, -6.0])   # überhöhte Kombi-Translation
     if kind == "clean":
         _draw_slab(ax, yb0, yb1, C_WP_B, ident)
     elif kind == "shift_x":
         _draw_slab(ax, yb0, yb1, C_WP_B,
                    lambda p: p + np.array([dx_shift, 0, 0]))
+    elif kind == "shift_xyz":
+        _draw_slab(ax, yb0, yb1, C_WP_B, lambda p: p + d_xyz)
+    elif kind == "yaw_z_shift_x":
+        # um Z gedreht (Spalt wird keilförmig) und zusätzlich in X verschoben
+        yc = (yb0 + yb1) / 2
+        rot = _rot_z_about(12, 0, yc)
+        _draw_slab(ax, yb0, yb1, C_WP_B,
+                   lambda p: rot(p) + np.array([16.0, 0, 0]))
     elif kind == "tilt_y":
         _draw_slab(ax, yb0, yb1, C_WP_B, _rot_y_about(15, 0, _TZ / 2))
     elif kind == "yaw_z":
@@ -191,13 +207,30 @@ def draw_fault_schematic(ax, kind: str):
                   arrow_length_ratio=0.26, linewidth=2.4, zorder=11)
         ax.text(0, yc, _TZ + 16, "verschoben in X", fontsize=8.5,
                 color=C_EXCESS, weight="bold", ha="left", va="bottom")
+    elif kind == "shift_xyz":
+        # roter Pfeil oberhalb der Teile in Richtung der überhöhten
+        # Kombi-Translation, damit er nicht in den Quadern verschwindet
+        ax.quiver(-42, 8, _TZ + 18, 46, -17, -12, color=C_EXCESS,
+                  arrow_length_ratio=0.2, linewidth=2.6, zorder=12)
+        ax.text(-46, 8, _TZ + 25, "Translation X·Y·Z", fontsize=8.5,
+                color=C_EXCESS, weight="bold", ha="left")
+    elif kind == "yaw_z_shift_x":
+        yc = (yb0 + yb1) / 2
+        ax.plot([16, 16], [yc, yc], [0, _TZ + 24], color=C_EXCESS,
+                linewidth=1.8, linestyle=(0, (4, 2)), zorder=10)
+        ax.text(20, yc, _TZ + 27, "Drehachse Z", fontsize=8.5,
+                color=C_EXCESS, weight="bold", ha="left")
+        # roter X-Pfeil ohne Label — Richtung reicht, die Kastenunterschrift
+        # nennt die Verschiebung; ein schwebendes 3D-Label würde clippen
+        ax.quiver(-30, yc, _TZ + 7, 32, 0, 0, color=C_EXCESS,
+                  arrow_length_ratio=0.26, linewidth=2.6, zorder=11)
 
-    ax.set_box_aspect((_LX, 2 * _WY + _GAP, 36))
+    ax.set_box_aspect((_LX, 2 * _WY + _GAP, 40))
     ax.view_init(elev=20, azim=-62)
     ax.set_axis_off()
     ax.set_xlim(-_LX / 2 - 10, _LX / 2 + 24)
-    ax.set_ylim(yb0 - 12, _GAP / 2 + _WY + 4)
-    ax.set_zlim(0, 32)
+    ax.set_ylim(yb0 - 18, _GAP / 2 + _WY + 4)
+    ax.set_zlim(-8, 32)
 
 
 def _footer(fig):
@@ -270,77 +303,105 @@ def _load_report(case: str) -> dict:
 
 
 def figure_three_levels(cad, path: Path):
-    case = "C_TR_08"
+    # Drehung um Z + Verschiebung in X: beide Fehler leben in der Draufsicht
+    # (der Spalt wird keilförmig, die Enden wandern), kein Höhenanteil, der
+    # erst in 3D sichtbar wäre. Eigens erzeugter Fall, Rotation um B's
+    # Schwerpunkt, damit die sechs Freiheitsgrade sauber Rz + Tx zeigen.
+    case = "C_ZX_01"
+    if not (OUTPUTS / case / "subtraction_report.json").exists():
+        raise SystemExit(
+            f"Fall {case} fehlt in data/outputs/. Erst erzeugen:\n"
+            "  uv run python scripts/generate_rztx_demo.py\n"
+            "  uv run python scripts/run_batch_subtraction.py "
+            "--scan-dir data/raw/_rztx_demo --source-type synthetic")
     rep = _load_report(case)["deviation"]
     field = signed_distance_field(OUTPUTS / case, cad)
-    fig, axes = plt.subplots(1, 3, figsize=(16, 6.0), dpi=DPI,
-                             gridspec_kw={"width_ratios": [1, 1.5, 1.15]})
-
-    # Ebene 1 — ein Wert
-    ax = axes[0]
-    ax.axis("off")
     rate = field.in_tolerance_rate * 100
-    ax.text(0.5, 0.72, f"{rate:.0f} %", ha="center", va="center",
-            fontsize=64, color=C_BAD, weight="bold")
-    ax.text(0.5, 0.50, "der Punkte in Toleranz", ha="center", fontsize=12,
-            color=INK)
-    # schlichter Fortschrittsbalken 0..100
-    ax.add_patch(plt.Rectangle((0.15, 0.34), 0.70, 0.05, color=GRID,
-                               transform=ax.transAxes))
-    ax.add_patch(plt.Rectangle((0.15, 0.34), 0.70 * rate / 100, 0.05,
-                               color=C_BAD, transform=ax.transAxes))
-    ax.text(0.5, 0.16, "Ein Wert fürs ganze Teil.\nSagt: schlecht.\n"
-            "Sagt nicht: wo.", ha="center", va="top", fontsize=11, color=INK2)
-    ax.set_title("① Global", fontsize=13, color=INK, weight="bold", loc="left")
+    cr = rep["component_registration"]
+    tr, rot = cr["translation_mm"], cr["rotation_deg"]
 
-    # Ebene 2 — Voxel zeigt WO
-    ax = axes[1]
+    fig = plt.figure(figsize=(18, 6.9), dpi=DPI)
+    bg = fig.add_axes([0, 0, 1, 1]); bg.set_axis_off()
+    bg.set_xlim(0, 1); bg.set_ylim(0, 1)
+
+    # Vier gleich hohe Kästen: der Fehler und die drei Auswertungsebenen.
+    cards = {0: (0.020, 0.10, 0.225, 0.72),   # Schema
+             1: (0.262, 0.10, 0.170, 0.72),   # Global
+             2: (0.449, 0.10, 0.258, 0.72),   # Voxel
+             3: (0.724, 0.10, 0.256, 0.72)}   # 6 DOF
+    for x, y, w, h in cards.values():
+        bg.add_patch(FancyBboxPatch(
+            (x, y), w, h, boxstyle="round,pad=0,rounding_size=0.016",
+            facecolor="#f6f7f9", edgecolor="#ccd3da", linewidth=1.4))
+    cx = lambda i: cards[i][0] + cards[i][2] / 2
+    header_y = cards[0][1] + cards[0][3] - 0.055
+    for i, htext in ((0, "Der Fehler"), (1, "① Global"),
+                     (2, "② Voxel"), (3, "③ Sechs Freiheitsgrade")):
+        bg.text(cx(i), header_y, htext, ha="center", fontsize=15.5,
+                weight="bold", color=INK)
+
+    # ── Kasten 0: Schemaskizze ───────────────────────────────────────
+    x, y, w, h = cards[0]
+    ax3 = fig.add_axes([x - 0.01, 0.15, w + 0.02, 0.55], projection="3d")
+    draw_fault_schematic(ax3, "yaw_z_shift_x")
+    bg.text(cx(0), 0.145, "Werkstück um Z gedreht\nund in X verschoben.",
+            ha="center", va="top", fontsize=12.5, color=INK2)
+
+    # ── Kasten 1: globaler Kennwert ──────────────────────────────────
+    bg.text(cx(1), 0.55, f"{rate:.0f} %", ha="center", va="center",
+            fontsize=54, weight="bold", color=C_BAD)
+    bg.text(cx(1), 0.445, "in Toleranz", ha="center", fontsize=15, color=INK)
+    x, y, w, h = cards[1]
+    bx, bw, by = x + 0.022, w - 0.044, 0.37
+    bg.add_patch(plt.Rectangle((bx, by), bw, 0.026, color="#d5dae0"))
+    bg.add_patch(plt.Rectangle((bx, by), bw * rate / 100, 0.026, color=C_BAD))
+    bg.text(cx(1), 0.30, "Anteil der Fläche innerhalb\n±0.25 mm — ein Skalar\n"
+            "ohne räumliche Auflösung.", ha="center", va="top", fontsize=12.5,
+            color=INK2)
+
+    # ── Kasten 2: Voxelkarte ─────────────────────────────────────────
+    x, y, w, h = cards[2]
+    axv = fig.add_axes([x + 0.008, 0.335, w - 0.016, 0.40])
     vox = rep["voxel_deviation"]
     centers = np.array(vox["centers"])
     mean_signed = np.array(vox["mean_signed"], dtype=float)
-    vmax = float(np.nanpercentile(np.abs(mean_signed), 98))
+    # enge Skala: die Keil-Abweichung sitzt konzentriert an der Naht, eine
+    # weite Skala würde sie ausbleichen.
+    vmax = 0.4
     norm = TwoSlopeNorm(vcenter=0.0, vmin=-vmax, vmax=vmax)
-    m = ax.scatter(centers[:, 0], centers[:, 1], c=mean_signed, cmap=DEV_CMAP,
-                   norm=norm, s=30, marker="s", linewidths=0)
-    cbar = fig.colorbar(m, ax=ax, fraction=0.045, pad=0.02)
-    cbar.set_label("Abstand je Würfel (mm)", fontsize=8, color=INK2)
-    cbar.ax.tick_params(colors=MUTED, labelsize=7)
-    ax.set_title("② Voxel — zeigt WO", fontsize=13, color=INK, weight="bold",
-                 loc="left")
-    ax.text(0.5, -0.30, "Die Abweichung sitzt nicht überall gleich —\n"
-            "sie ballt sich in einer Ecke.", transform=ax.transAxes,
-            ha="center", fontsize=9.5, color=MUTED)
-    _plate_axes(ax)
-    ax.set_ylabel("quer (mm)", fontsize=9, color=INK2)
+    axv.scatter(centers[:, 0], centers[:, 1], c=mean_signed, cmap=DEV_CMAP,
+                norm=norm, s=14, marker="s", linewidths=0)
+    axv.set_aspect("equal"); axv.set_axis_off()
+    bg.text(cx(2), 0.285, "Mittlerer Abstand je 5-mm-Würfel —\n"
+            "lokalisiert die Abweichung.", ha="center", va="top",
+            fontsize=12.5, color=INK2)
+    bg.text(cx(2), 0.17, "rot: Material steht über   ·   blau: fehlt",
+            ha="center", fontsize=12, color=INK2)
 
-    # Ebene 3 — Merkmale benennen WAS (Stat-Liste, gemischte Einheiten)
-    ax = axes[2]
-    ax.axis("off")
-    ax.set_title("③ Merkmale — benennen WAS", fontsize=13, color=INK,
-                 weight="bold", loc="left")
-    gp = rep["gap_profile"]["opposite_vs_reference"]
-    fa = np.array(rep["gap_profile"]["flank_a_profile"]["slope"], dtype=float)
-    fb = np.array(rep["gap_profile"]["flank_b_profile"]["slope"], dtype=float)
-    asym = abs(np.degrees(np.arctan(np.abs(np.nanmean(fa))))
-               - np.degrees(np.arctan(np.abs(np.nanmean(fb)))))
-    rows = [
-        (f"{gp['height_offset_mm']:.2f} mm", "Kantenversatz",
-         "Bauteile höhenversetzt"),
-        (f"{gp['tilt_total_deg']:.2f}°", "Verkippung",
-         "ein Teil gegen das andere gekippt"),
-        (f"{asym:.2f}°", "Flankenasymmetrie", "Flanken ungleich steil"),
-    ]
-    y = 0.74
-    for value, name, desc in rows:
-        ax.text(0.04, y, value, fontsize=22, color=INK, weight="bold",
-                va="center")
-        ax.text(0.04, y - 0.09, name, fontsize=11, color=INK, va="center")
-        ax.text(0.04, y - 0.155, desc, fontsize=9, color=MUTED, va="center")
-        y -= 0.30
+    # ── Kasten 3: sechs Freiheitsgrade ───────────────────────────────
+    x, y, w, h = cards[3]
+    bg.text(cx(3), 0.66, "Relativlage der Werkstücke, aus der Registrierung",
+            ha="center", fontsize=11.5, color=INK2)
+    col_t, col_r = x + 0.03, x + 0.145
+    bg.text(col_t, 0.585, "Translation", fontsize=12, color=INK2, weight="bold")
+    bg.text(col_r, 0.585, "Rotation", fontsize=12, color=INK2, weight="bold")
+    dof = [("Tx", tr["x"], "mm"), ("Ty", tr["y"], "mm"), ("Tz", tr["z"], "mm"),
+           ("Rx", rot["x"], "°"), ("Ry", rot["y"], "°"), ("Rz", rot["z"], "°")]
+    for k, (name, val, unit) in enumerate(dof):
+        col = col_t if k < 3 else col_r
+        yy = 0.50 - (k % 3) * 0.115
+        active = abs(val) > 0.05
+        disp = val if active else 0.0        # kein "-0.00"
+        # Nullwerte gedämpft, aber lesbar (dunkles Grau, nicht Hellgrau)
+        c_val = INK if active else INK2
+        wt = "bold" if active else "normal"
+        bg.text(col, yy, name, fontsize=13, color=INK2, weight="bold")
+        bg.text(col + 0.028, yy, f"{disp:+.2f} {unit}", fontsize=15,
+                color=c_val, weight=wt)
 
-    fig.suptitle("Warum drei Auswertungsebenen — am Fall C_TR_08",
-                 fontsize=14, weight="bold", color=INK, y=1.0)
-    fig.tight_layout(rect=(0, 0.10, 1, 0.93))
+    fig.suptitle("Drei Auswertungsebenen am selben Bauteil — Drehung um Z "
+                 "und Verschiebung in X", fontsize=16, weight="bold",
+                 color=INK, y=0.95)
     _footer(fig)
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)

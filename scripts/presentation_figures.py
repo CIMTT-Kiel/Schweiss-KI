@@ -85,9 +85,9 @@ FOOTER = "Synthetische Daten"
 
 def _plate_axes(ax):
     ax.set_aspect("equal")
-    ax.set_xlabel("X — Naht-Längsrichtung (mm)", fontsize=9, color=INK2)
-    ax.set_ylabel("Y — quer (mm)", fontsize=9, color=INK2)
-    ax.tick_params(colors=MUTED, labelsize=8)
+    ax.set_xlabel("X — Naht-Längsrichtung (mm)", fontsize=9, color=INK)
+    ax.set_ylabel("Y — quer (mm)", fontsize=9, color=INK)
+    ax.tick_params(colors=INK, labelsize=8)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
@@ -179,14 +179,15 @@ def draw_fault_schematic(ax, kind: str):
         # der Spalt öffnet sich keilförmig.
         _draw_slab(ax, yb0, yb1, C_WP_B, _rot_z_about(11, _LX / 2, yb1))
 
-    # Koordinatensystem an der vorderen unteren Ecke
-    ox, oy, oz = -_LX / 2 - 8, yb0 - 8, 0
-    triad = [((38, 0, 0), "X"), ((0, 22, 0), "Y"), ((0, 0, 20), "Z")]
+    # Koordinatensystem klar vor den Teilen (weit vorne links), damit kein
+    # Werkstück es verdeckt — auch die +Y-Achse endet noch vor der Vorderkante.
+    ox, oy, oz = -_LX / 2 - 12, yb0 - 26, 0
+    triad = [((30, 0, 0), "X"), ((0, 16, 0), "Y"), ((0, 0, 20), "Z")]
     for (u, v, w), name in triad:
-        ax.quiver(ox, oy, oz, u, v, w, color=INK, arrow_length_ratio=0.16,
-                  linewidth=1.6)
-        ax.text(ox + u * 1.14, oy + v * 1.16, oz + w * 1.16, name,
-                fontsize=11, color=INK, weight="bold", ha="center", va="center")
+        ax.quiver(ox, oy, oz, u, v, w, color=INK, arrow_length_ratio=0.18,
+                  linewidth=1.8, zorder=20)
+        ax.text(ox + u * 1.18, oy + v * 1.25, oz + w * 1.16, name, fontsize=11,
+                color=INK, weight="bold", ha="center", va="center", zorder=21)
 
     # Drehachse markieren
     if kind in ("tilt_y", "raise_tilt_y"):
@@ -228,8 +229,8 @@ def draw_fault_schematic(ax, kind: str):
     ax.set_box_aspect((_LX, 2 * _WY + _GAP, 40))
     ax.view_init(elev=20, azim=-62)
     ax.set_axis_off()
-    ax.set_xlim(-_LX / 2 - 10, _LX / 2 + 24)
-    ax.set_ylim(yb0 - 18, _GAP / 2 + _WY + 4)
+    ax.set_xlim(-_LX / 2 - 14, _LX / 2 + 24)
+    ax.set_ylim(yb0 - 30, _GAP / 2 + _WY + 4)
     ax.set_zlim(-8, 32)
 
 
@@ -250,11 +251,11 @@ def figure_deviation_map(cad, path: Path):
     fig.text(0.24, 0.925, "Was verstellt wurde", ha="center", fontsize=12,
              color=INK, weight="bold")
     fig.text(0.24, 0.910, "Schema, Fehlstellung überhöht", ha="center",
-             fontsize=8.5, color=MUTED)
+             fontsize=9, color=INK)
     fig.text(0.64, 0.925, "Was die Messung sieht", ha="center", fontsize=12,
              color=INK, weight="bold")
     fig.text(0.64, 0.910, "Draufsicht auf die XY-Ebene", ha="center",
-             fontsize=8.5, color=MUTED)
+             fontsize=9, color=INK)
 
     mappable = None
     for r, (case, title, fault, sub) in enumerate(CASES):
@@ -273,7 +274,7 @@ def figure_deviation_map(cad, path: Path):
         axm.set_title(f"{title} — {rate:.0f} % in Toleranz", fontsize=12,
                       color=INK, weight="bold", pad=14)
         axm.text(0.5, 1.02, sub, transform=axm.transAxes, ha="center",
-                 va="bottom", fontsize=8.7, color=MUTED)
+                 va="bottom", fontsize=9.5, color=INK)
         _plate_axes(axm)
 
     fig.suptitle("Abweichung zum CAD-Ideal — Scan eingefärbt nach Abstand",
@@ -281,14 +282,14 @@ def figure_deviation_map(cad, path: Path):
 
     cax = fig.add_axes([0.895, 0.30, 0.015, 0.40])
     cbar = fig.colorbar(mappable, cax=cax, extend="both")
-    cbar.ax.tick_params(colors=MUTED, labelsize=8)
+    cbar.ax.tick_params(colors=INK, labelsize=8)
     cbar.ax.axhspan(-TOLERANCE_MM, TOLERANCE_MM, facecolor="none",
                     edgecolor=INK, linewidth=1.0)
     for y, txt, va in ((VMAX, "Material\nsteht über", "top"),
                        (0.0, "in Toleranz\n(±0.25 mm)", "center"),
                        (-VMAX, "Material\nfehlt", "bottom")):
         cbar.ax.text(2.6, y, txt, transform=cbar.ax.get_yaxis_transform(),
-                     ha="left", va=va, fontsize=8.5, color=INK2)
+                     ha="left", va=va, fontsize=8.5, color=INK)
 
     _footer(fig)
     fig.savefig(path, bbox_inches="tight")
@@ -422,7 +423,7 @@ def figure_before_after(path: Path):
         ax.text(b.get_x() + b.get_width() / 2, v + 1.5, f"{v:.1f} %",
                 ha="center", fontsize=13, color=INK, weight="bold")
     ax.set_ylim(0, 112)
-    ax.set_ylabel("Anteil der Naht in Toleranz (%)", fontsize=10, color=INK2)
+    ax.set_ylabel("Anteil der Naht in Toleranz (%)", fontsize=10, color=INK)
     ax.set_title("Wie viel liegt in Toleranz?", fontsize=12, color=INK,
                  weight="bold")
 
@@ -432,7 +433,7 @@ def figure_before_after(path: Path):
         ax.text(b.get_x() + b.get_width() / 2, v + 0.012, f"{v:.4f} mm",
                 ha="center", fontsize=13, color=INK, weight="bold")
     ax.set_ylim(0, 0.47)
-    ax.set_ylabel("Registrierungs-Einfluss RMS (mm)", fontsize=10, color=INK2)
+    ax.set_ylabel("Registrierungs-Einfluss RMS (mm)", fontsize=10, color=INK)
     ax.set_title("Wie stark verfälscht die Ausrichtung?", fontsize=12,
                  color=INK, weight="bold")
     ax.annotate("240× kleiner", xy=(1, rms[1]), xytext=(1, 0.22),
@@ -440,7 +441,7 @@ def figure_before_after(path: Path):
                 arrowprops=dict(arrowstyle="->", color=C_GOOD, lw=1.6))
 
     for ax in axes:
-        ax.tick_params(colors=MUTED, labelsize=10)
+        ax.tick_params(colors=INK, labelsize=10)
         ax.tick_params(axis="x", colors=INK)
         for s in ("top", "right"):
             ax.spines[s].set_visible(False)

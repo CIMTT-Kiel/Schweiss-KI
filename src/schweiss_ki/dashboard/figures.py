@@ -108,12 +108,13 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
     mn, mx = data_pts.min(0), data_pts.max(0)
 
     if show_triad:
-        # gleich lange Pfeile, an der grössten Ausdehnung bemessen, ab der
-        # Min-Ecke der Bounding-Box (klar an der Kante, nicht in der Wolke).
-        L = 0.20 * float((mx - mn).max())
-        o = mn.copy()
+        # kleines Achsenkreuz, ein Stück ausserhalb der Min-Ecke — nicht ans
+        # Bauteil geheftet, gleich lange kurze Pfeile.
+        L = 0.10 * float((mx - mn).max())
+        o = mn - np.array([0.7 * L, 0.7 * L, 0.0])
         _add_triad(fig, o, L)
-        mx = np.maximum(mx, o + 1.25 * L)   # Spitzen ins Extent aufnehmen
+        mn = np.minimum(mn, o)
+        mx = np.maximum(mx, o + 1.25 * L)   # Ecke + Spitzen ins Extent
 
     rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
     ar = np.array([rng[0], rng[1], rng[2] * z_exagg])

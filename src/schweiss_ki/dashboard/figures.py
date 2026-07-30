@@ -79,8 +79,8 @@ def _add_triad(fig: go.Figure, extent_pts: np.ndarray) -> None:
         return
     mn, mx = extent_pts.min(0), extent_pts.max(0)
     rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
-    L = 0.18 * float(rng.max())                 # gleiche Datenlänge je Achse
-    o = np.array([mn[0] - 0.12 * L, mn[1] - 0.12 * L, mn[2]])
+    L = 0.16 * float(rng.max())                 # gleiche Datenlänge je Achse
+    o = np.zeros(3)                             # am Koordinatenursprung (0,0,0)
     for axis, vec in (("X", (L, 0, 0)), ("Y", (0, L, 0)), ("Z", (0, 0, L))):
         col = TRIAD_COLORS[axis]
         tip = o + np.array(vec)

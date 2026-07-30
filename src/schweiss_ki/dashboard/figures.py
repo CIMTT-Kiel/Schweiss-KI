@@ -79,19 +79,25 @@ def _add_triad(fig: go.Figure, extent_pts: np.ndarray) -> None:
         return
     mn, mx = extent_pts.min(0), extent_pts.max(0)
     rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
-    L = 0.16 * float(rng.max())                 # gleiche Datenlänge je Achse
+    # Pfeillänge je Achse proportional zu deren Ausdehnung: so bricht keine
+    # Achse aus dem Datenbereich aus (der Z-Pfeil auf dem flachen Bauteil war
+    # sonst viel zu lang und wurde abgeschnitten).
+    L = 0.28 * rng
     o = np.zeros(3)                             # am Koordinatenursprung (0,0,0)
-    for axis, vec in (("X", (L, 0, 0)), ("Y", (0, L, 0)), ("Z", (0, 0, L))):
+    for axis, vec in (("X", (L[0], 0, 0)), ("Y", (0, L[1], 0)),
+                      ("Z", (0, 0, L[2]))):
         col = TRIAD_COLORS[axis]
         tip = o + np.array(vec)
+        length = float(np.linalg.norm(vec))
         fig.add_trace(go.Scatter3d(
             x=[o[0], tip[0]], y=[o[1], tip[1]], z=[o[2], tip[2]], mode="lines",
             line=dict(color=col, width=6), showlegend=False, hoverinfo="skip"))
         fig.add_trace(go.Cone(
             x=[tip[0]], y=[tip[1]], z=[tip[2]], u=[vec[0]], v=[vec[1]],
-            w=[vec[2]], sizemode="absolute", sizeref=L * 0.32, anchor="tip",
-            showscale=False, colorscale=[[0, col], [1, col]], hoverinfo="skip"))
-        lab = o + 1.16 * np.array(vec)
+            w=[vec[2]], sizemode="absolute", sizeref=length * 0.35,
+            anchor="tip", showscale=False, colorscale=[[0, col], [1, col]],
+            hoverinfo="skip"))
+        lab = o + 1.22 * np.array(vec)
         fig.add_trace(go.Scatter3d(
             x=[lab[0]], y=[lab[1]], z=[lab[2]], mode="text", text=[axis],
             textfont=dict(color=col, size=16, family="system-ui"),
@@ -248,8 +254,10 @@ def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
                    fill_color=[["#ffffff", "#f6f7f9"] * len(rows)])), 1, 3)
 
     _base_layout(fig)
+    # Nur ein XY-Subplot vorhanden (Global=Indicator, Merkmale=Table), der
+    # Voxel-Plot liegt also auf 'x'/'y' — scaleanchor muss darauf zeigen.
     fig.update_xaxes(title="X (mm)", row=1, col=2)
-    fig.update_yaxes(title="Y (mm)", scaleanchor="x2", scaleratio=1,
+    fig.update_yaxes(title="Y (mm)", scaleanchor="x", scaleratio=1,
                      row=1, col=2)
     fig.update_layout(showlegend=False, margin=dict(l=45, r=20, t=55, b=45))
     return fig

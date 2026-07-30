@@ -50,56 +50,30 @@ def _colorbar(vmax: float) -> dict:
     )
 
 
-def _aspect(scan_pts: np.ndarray, cad_pts: np.ndarray, z_exagg: float) -> dict:
-    """Achsenverhältnis aus den Datenausdehnungen, Z optional überhöht.
-
-    z_exagg=1 → echte Proportionen (wie aspectmode='data'). Bei flachen
-    Bauteilen (Z ≪ X) machen grössere Werte Höhen-/Kippfehler geometrisch
-    sichtbar, ohne die Messwerte zu verändern — nur die Darstellung.
-    """
-    pts = scan_pts if not len(cad_pts) else np.vstack([scan_pts, cad_pts])
-    rng = np.ptp(pts, axis=0).astype(float)
-    rng[rng < 1e-6] = 1.0
-    ar = np.array([rng[0], rng[1], rng[2] * z_exagg])
-    ar /= ar.max()
-    return dict(x=float(ar[0]), y=float(ar[1]), z=float(ar[2]))
-
-
 # Achsenkreuz — eigene Farben, klar getrennt von der blau/rot-Abweichungsskala.
 TRIAD_COLORS = {"X": "#e07b00", "Y": "#1a9e5f", "Z": "#7048b6"}
 
 
-def _add_triad(fig: go.Figure, extent_pts: np.ndarray) -> None:
-    """Mitrotierendes X/Y/Z-Achsenkreuz mit Pfeilen in einer Ecke der Szene.
+def _add_triad(fig: go.Figure, length: float) -> None:
+    """Drei GLEICH lange X/Y/Z-Pfeile am Ursprung (0,0,0).
 
-    So sieht man beim Drehen sofort, um welche Achse gedreht wird. Liegt in
-    Datenkoordinaten, wird also von der Z-Streckung konsistent mitverzerrt.
+    Rotiert mit der Szene, sodass man die Drehachse sofort sieht. Die
+    Pfeillänge wird in build_3d ins Achsenverhältnis und die Achsengrenzen
+    einbezogen — sonst würde der lange Z-Pfeil auf dem flachen Bauteil in einen
+    hauchdünnen Z-Streifen gequetscht und wirkte gekappt.
     """
-    if not len(extent_pts):
-        return
-    mn, mx = extent_pts.min(0), extent_pts.max(0)
-    rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
-    # X/Y proportional zur Ausdehnung. Z bis DEUTLICH über die Oberseite
-    # hinaus: der Ursprung liegt an der Wurzel (z≈0), die Oberseite bei z≈5 —
-    # ein proportional kurzer Z-Pfeil steckte sonst unter den Punkten und
-    # wirkte gekappt.
-    L = 0.28 * rng
-    L[2] = mx[2] + 0.35 * rng[2]
-    o = np.zeros(3)                             # am Koordinatenursprung (0,0,0)
-    for axis, vec in (("X", (L[0], 0, 0)), ("Y", (0, L[1], 0)),
-                      ("Z", (0, 0, L[2]))):
+    for axis, vec in (("X", (length, 0, 0)), ("Y", (0, length, 0)),
+                      ("Z", (0, 0, length))):
         col = TRIAD_COLORS[axis]
-        tip = o + np.array(vec)
-        length = float(np.linalg.norm(vec))
         fig.add_trace(go.Scatter3d(
-            x=[o[0], tip[0]], y=[o[1], tip[1]], z=[o[2], tip[2]], mode="lines",
+            x=[0, vec[0]], y=[0, vec[1]], z=[0, vec[2]], mode="lines",
             line=dict(color=col, width=6), showlegend=False, hoverinfo="skip"))
         fig.add_trace(go.Cone(
-            x=[tip[0]], y=[tip[1]], z=[tip[2]], u=[vec[0]], v=[vec[1]],
-            w=[vec[2]], sizemode="absolute", sizeref=length * 0.35,
+            x=[vec[0]], y=[vec[1]], z=[vec[2]], u=[vec[0]], v=[vec[1]],
+            w=[vec[2]], sizemode="absolute", sizeref=length * 0.33,
             anchor="tip", showscale=False, colorscale=[[0, col], [1, col]],
             hoverinfo="skip"))
-        lab = o + 1.22 * np.array(vec)
+        lab = 1.2 * np.array(vec, dtype=float)
         fig.add_trace(go.Scatter3d(
             x=[lab[0]], y=[lab[1]], z=[lab[2]], mode="text", text=[axis],
             textfont=dict(color=col, size=16, family="system-ui"),
@@ -128,22 +102,36 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
         hovertemplate="X %{x:.1f} · Y %{y:.1f} · Z %{z:.1f} mm<br>"
                       "Abstand %{marker.color:+.3f} mm<extra></extra>"))
 
+    data_pts = (np.vstack([scan_pts, cad_pts])
+                if show_cad and len(cad_pts) else scan_pts)
+    mn, mx = data_pts.min(0), data_pts.max(0)
+
     if show_triad:
-        extent = (np.vstack([scan_pts, cad_pts])
-                  if show_cad and len(cad_pts) else scan_pts)
-        _add_triad(fig, extent)
+        # gleich lange Pfeile, an der grössten Ausdehnung bemessen
+        L = 0.20 * float((mx - mn).max())
+        _add_triad(fig, L)
+        mx = np.maximum(mx, 1.25 * L)   # Triade ins Extent aufnehmen
+        mn = np.minimum(mn, 0.0)
+
+    rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
+    ar = np.array([rng[0], rng[1], rng[2] * z_exagg])
+    ar /= ar.max()
+    pad = 0.03 * rng
 
     z_title = "Z — Tiefe (mm)" + (f"  ·  {z_exagg:g}× überhöht"
                                   if z_exagg > 1 else "")
     fig.update_layout(
         scene=dict(
             aspectmode="manual",
-            aspectratio=_aspect(scan_pts, cad_pts, z_exagg),
+            aspectratio=dict(x=float(ar[0]), y=float(ar[1]), z=float(ar[2])),
             xaxis=dict(title="X — Naht-Längs (mm)", color=INK,
-                       backgroundcolor=PLOT_BG),
+                       backgroundcolor=PLOT_BG,
+                       range=[mn[0] - pad[0], mx[0] + pad[0]]),
             yaxis=dict(title="Y — quer (mm)", color=INK,
-                       backgroundcolor=PLOT_BG),
-            zaxis=dict(title=z_title, color=INK, backgroundcolor=PLOT_BG),
+                       backgroundcolor=PLOT_BG,
+                       range=[mn[1] - pad[1], mx[1] + pad[1]]),
+            zaxis=dict(title=z_title, color=INK, backgroundcolor=PLOT_BG,
+                       range=[mn[2] - pad[2], mx[2] + pad[2]]),
         ),
         paper_bgcolor=PLOT_BG, font=dict(color=INK),
         margin=dict(l=0, r=0, t=10, b=0),

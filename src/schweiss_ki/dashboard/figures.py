@@ -79,10 +79,12 @@ def _add_triad(fig: go.Figure, extent_pts: np.ndarray) -> None:
         return
     mn, mx = extent_pts.min(0), extent_pts.max(0)
     rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
-    # Pfeillänge je Achse proportional zu deren Ausdehnung: so bricht keine
-    # Achse aus dem Datenbereich aus (der Z-Pfeil auf dem flachen Bauteil war
-    # sonst viel zu lang und wurde abgeschnitten).
+    # X/Y proportional zur Ausdehnung. Z bis DEUTLICH über die Oberseite
+    # hinaus: der Ursprung liegt an der Wurzel (z≈0), die Oberseite bei z≈5 —
+    # ein proportional kurzer Z-Pfeil steckte sonst unter den Punkten und
+    # wirkte gekappt.
     L = 0.28 * rng
+    L[2] = mx[2] + 0.35 * rng[2]
     o = np.zeros(3)                             # am Koordinatenursprung (0,0,0)
     for axis, vec in (("X", (L[0], 0, 0)), ("Y", (0, L[1], 0)),
                       ("Z", (0, 0, L[2]))):

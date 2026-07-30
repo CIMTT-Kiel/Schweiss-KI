@@ -206,19 +206,20 @@ def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
     dev = report["deviation"]
     fig = make_subplots(
         rows=1, cols=3, column_widths=[0.24, 0.42, 0.34],
-        specs=[[{"type": "xy"}, {"type": "xy"}, {"type": "table"}]],
-        subplot_titles=("① Global: Ø|Abstand| je Region",
+        specs=[[{"type": "indicator"}, {"type": "xy"}, {"type": "table"}]],
+        subplot_titles=("① Global: Anteil in Toleranz",
                         "② Voxel: räumliche Verteilung",
                         "③ Merkmale"),
         horizontal_spacing=0.06)
 
-    regions = dev.get("per_region_metrics", {})
-    names = [REGION_NAME.get(k, k) for k in regions]
-    vals = [r.get("mean_abs", math.nan) for r in regions.values()]
-    fig.add_trace(go.Bar(x=names, y=vals, marker_color="#37474f",
-                         hovertemplate="%{y:.3f} mm<extra></extra>"), 1, 1)
-    fig.add_hline(y=TOLERANCE_MM, line=dict(color="#e53935", dash="dash"),
-                  row=1, col=1)
+    rate = in_tol_rate * 100
+    fig.add_trace(go.Indicator(
+        mode="gauge+number", value=rate,
+        number=dict(suffix=" %", font=dict(size=42, color=INK)),
+        gauge=dict(axis=dict(range=[0, 100], tickcolor=INK,
+                             tickfont=dict(color=INK)),
+                   bar=dict(color="#0ca30c"), bgcolor="#eceff1",
+                   borderwidth=0)), 1, 1)
 
     vox = dev.get("voxel_deviation", {})
     centers = _finite(vox.get("centers", [])).reshape(-1, 3) if vox.get("centers") \
@@ -247,7 +248,6 @@ def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
                    fill_color=[["#ffffff", "#f6f7f9"] * len(rows)])), 1, 3)
 
     _base_layout(fig)
-    fig.update_yaxes(title="mm", row=1, col=1)
     fig.update_xaxes(title="X (mm)", row=1, col=2)
     fig.update_yaxes(title="Y (mm)", scaleanchor="x2", scaleratio=1,
                      row=1, col=2)

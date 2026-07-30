@@ -68,12 +68,15 @@ def build_app(outputs_dir: Path = data.DEFAULT_OUTPUTS) -> dash.Dash:
                   dcc.Dropdown(id="zexagg", options=Z_EXAGG_OPTIONS, value=1,
                                clearable=False,
                                style={"width": "130px"})], style=_BOX),
-        html.Div([html.Label("CAD-Ideal", style=_LABEL),
-                  dcc.Checklist(id="showcad",
-                                options=[{"label": " anzeigen", "value": "on"}],
-                                value=["on"],
-                                style={"color": INK, "fontSize": "13px"})],
-                 style=_BOX),
+        html.Div([html.Label("Anzeige", style=_LABEL),
+                  dcc.Checklist(id="display",
+                                options=[{"label": " CAD-Ideal", "value": "cad"},
+                                         {"label": " Achsenkreuz",
+                                          "value": "triad"}],
+                                value=["cad", "triad"],
+                                labelStyle={"marginRight": "10px"},
+                                style={"color": INK, "fontSize": "13px",
+                                       "display": "flex"})], style=_BOX),
         html.Div(id="badge", style={"marginLeft": "auto",
                                     "alignSelf": "center"}),
     ], style={"display": "flex", "gap": "22px", "alignItems": "flex-end",
@@ -121,9 +124,10 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
         Output("view", "figure"), Output("badge", "children"),
         Output("badge", "style"), Output("caseinfo", "children"),
         Input("tabs", "value"), Input("case", "value"),
-        Input("npoints", "value"), Input("showcad", "value"),
+        Input("npoints", "value"), Input("display", "value"),
         Input("zexagg", "value"))
-    def _update(tab, case, npoints, showcad, zexagg):
+    def _update(tab, case, npoints, display, zexagg):
+        display = display or []
         if not case:
             return _placeholder("Keine Fälle in data/outputs gefunden."), \
                 "", {"display": "none"}, ""
@@ -140,11 +144,13 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
                 f"{_de(len(field.points))} Punkte   ·   Quelle: {src}")
 
         if tab == "3d":
+            show_cad, show_triad = "cad" in display, "triad" in display
             scan_pts, signed = data.downsampled_cloud(field, npoints)
             cad = (data.cad_top_points(outputs_dir, CAD_DISPLAY_N)
-                   if showcad else np.empty((0, 3)))
+                   if show_cad else np.empty((0, 3)))
             fig = build_3d(np.asarray(cad), scan_pts, signed,
-                           show_cad=bool(showcad), z_exagg=float(zexagg or 1))
+                           show_cad=show_cad, z_exagg=float(zexagg or 1),
+                           show_triad=show_triad)
         elif tab == "map":
             scan_pts, signed = data.downsampled_cloud(field, npoints)
             fig = build_map(scan_pts, signed)

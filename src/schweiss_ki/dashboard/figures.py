@@ -65,8 +65,42 @@ def _aspect(scan_pts: np.ndarray, cad_pts: np.ndarray, z_exagg: float) -> dict:
     return dict(x=float(ar[0]), y=float(ar[1]), z=float(ar[2]))
 
 
+# Achsenkreuz — eigene Farben, klar getrennt von der blau/rot-Abweichungsskala.
+TRIAD_COLORS = {"X": "#e07b00", "Y": "#1a9e5f", "Z": "#7048b6"}
+
+
+def _add_triad(fig: go.Figure, extent_pts: np.ndarray) -> None:
+    """Mitrotierendes X/Y/Z-Achsenkreuz mit Pfeilen in einer Ecke der Szene.
+
+    So sieht man beim Drehen sofort, um welche Achse gedreht wird. Liegt in
+    Datenkoordinaten, wird also von der Z-Streckung konsistent mitverzerrt.
+    """
+    if not len(extent_pts):
+        return
+    mn, mx = extent_pts.min(0), extent_pts.max(0)
+    rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
+    L = 0.18 * float(rng.max())                 # gleiche Datenlänge je Achse
+    o = np.array([mn[0] - 0.12 * L, mn[1] - 0.12 * L, mn[2]])
+    for axis, vec in (("X", (L, 0, 0)), ("Y", (0, L, 0)), ("Z", (0, 0, L))):
+        col = TRIAD_COLORS[axis]
+        tip = o + np.array(vec)
+        fig.add_trace(go.Scatter3d(
+            x=[o[0], tip[0]], y=[o[1], tip[1]], z=[o[2], tip[2]], mode="lines",
+            line=dict(color=col, width=6), showlegend=False, hoverinfo="skip"))
+        fig.add_trace(go.Cone(
+            x=[tip[0]], y=[tip[1]], z=[tip[2]], u=[vec[0]], v=[vec[1]],
+            w=[vec[2]], sizemode="absolute", sizeref=L * 0.32, anchor="tip",
+            showscale=False, colorscale=[[0, col], [1, col]], hoverinfo="skip"))
+        lab = o + 1.16 * np.array(vec)
+        fig.add_trace(go.Scatter3d(
+            x=[lab[0]], y=[lab[1]], z=[lab[2]], mode="text", text=[axis],
+            textfont=dict(color=col, size=16, family="system-ui"),
+            showlegend=False, hoverinfo="skip"))
+
+
 def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
-             *, show_cad: bool = True, z_exagg: float = 1.0) -> go.Figure:
+             *, show_cad: bool = True, z_exagg: float = 1.0,
+             show_triad: bool = True) -> go.Figure:
     """CAD-Ideal (grau) und Fall (nach signiertem Abstand eingefärbt), drehbar."""
     vmax = robust_vmax(signed)
     fig = go.Figure()
@@ -85,6 +119,11 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
         name="Scan",
         hovertemplate="X %{x:.1f} · Y %{y:.1f} · Z %{z:.1f} mm<br>"
                       "Abstand %{marker.color:+.3f} mm<extra></extra>"))
+
+    if show_triad:
+        extent = (np.vstack([scan_pts, cad_pts])
+                  if show_cad and len(cad_pts) else scan_pts)
+        _add_triad(fig, extent)
 
     z_title = "Z — Tiefe (mm)" + (f"  ·  {z_exagg:g}× überhöht"
                                   if z_exagg > 1 else "")

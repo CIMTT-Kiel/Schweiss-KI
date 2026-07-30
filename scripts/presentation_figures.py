@@ -180,9 +180,10 @@ def draw_fault_schematic(ax, kind: str):
         _draw_slab(ax, yb0, yb1, C_WP_B, _rot_z_about(11, _LX / 2, yb1))
 
     # Koordinatensystem klar vor den Teilen (weit vorne links), damit kein
-    # Werkstück es verdeckt — auch die +Y-Achse endet noch vor der Vorderkante.
-    ox, oy, oz = -_LX / 2 - 12, yb0 - 26, 0
-    triad = [((30, 0, 0), "X"), ((0, 16, 0), "Y"), ((0, 0, 20), "Z")]
+    # Werkstück es verdeckt — auch die +Y-Achse endet noch vor der Vorderkante,
+    # und die vorschwenkende Ecke des gedrehten Teils (yaw_z) hält Abstand.
+    ox, oy, oz = -_LX / 2 - 16, yb0 - 34, 0
+    triad = [((26, 0, 0), "X"), ((0, 15, 0), "Y"), ((0, 0, 20), "Z")]
     for (u, v, w), name in triad:
         ax.quiver(ox, oy, oz, u, v, w, color=INK, arrow_length_ratio=0.18,
                   linewidth=1.8, zorder=20)
@@ -229,8 +230,8 @@ def draw_fault_schematic(ax, kind: str):
     ax.set_box_aspect((_LX, 2 * _WY + _GAP, 40))
     ax.view_init(elev=20, azim=-62)
     ax.set_axis_off()
-    ax.set_xlim(-_LX / 2 - 14, _LX / 2 + 24)
-    ax.set_ylim(yb0 - 30, _GAP / 2 + _WY + 4)
+    ax.set_xlim(-_LX / 2 - 18, _LX / 2 + 24)
+    ax.set_ylim(yb0 - 38, _GAP / 2 + _WY + 4)
     ax.set_zlim(-8, 32)
 
 

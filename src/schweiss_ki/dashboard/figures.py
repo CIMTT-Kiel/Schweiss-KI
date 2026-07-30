@@ -40,8 +40,23 @@ def _colorbar(vmax: float) -> dict:
     )
 
 
+def _aspect(scan_pts: np.ndarray, cad_pts: np.ndarray, z_exagg: float) -> dict:
+    """Achsenverhältnis aus den Datenausdehnungen, Z optional überhöht.
+
+    z_exagg=1 → echte Proportionen (wie aspectmode='data'). Bei flachen
+    Bauteilen (Z ≪ X) machen grössere Werte Höhen-/Kippfehler geometrisch
+    sichtbar, ohne die Messwerte zu verändern — nur die Darstellung.
+    """
+    pts = scan_pts if not len(cad_pts) else np.vstack([scan_pts, cad_pts])
+    rng = np.ptp(pts, axis=0).astype(float)
+    rng[rng < 1e-6] = 1.0
+    ar = np.array([rng[0], rng[1], rng[2] * z_exagg])
+    ar /= ar.max()
+    return dict(x=float(ar[0]), y=float(ar[1]), z=float(ar[2]))
+
+
 def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
-             *, show_cad: bool = True) -> go.Figure:
+             *, show_cad: bool = True, z_exagg: float = 1.0) -> go.Figure:
     """CAD-Ideal (grau) und Fall (nach signiertem Abstand eingefärbt), drehbar."""
     vmax = robust_vmax(signed)
     fig = go.Figure()
@@ -61,15 +76,17 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
         hovertemplate="X %{x:.1f} · Y %{y:.1f} · Z %{z:.1f} mm<br>"
                       "Abstand %{marker.color:+.3f} mm<extra></extra>"))
 
+    z_title = "Z — Tiefe (mm)" + (f"  ·  {z_exagg:g}× überhöht"
+                                  if z_exagg > 1 else "")
     fig.update_layout(
         scene=dict(
-            aspectmode="data",   # echte Proportionen aus den Daten
+            aspectmode="manual",
+            aspectratio=_aspect(scan_pts, cad_pts, z_exagg),
             xaxis=dict(title="X — Naht-Längs (mm)", color=INK,
                        backgroundcolor=PLOT_BG),
             yaxis=dict(title="Y — quer (mm)", color=INK,
                        backgroundcolor=PLOT_BG),
-            zaxis=dict(title="Z — Tiefe (mm)", color=INK,
-                       backgroundcolor=PLOT_BG),
+            zaxis=dict(title=z_title, color=INK, backgroundcolor=PLOT_BG),
         ),
         paper_bgcolor=PLOT_BG, font=dict(color=INK),
         margin=dict(l=0, r=0, t=10, b=0),

@@ -20,7 +20,9 @@ def _de(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
 
-POINT_CHOICES = (20000, 50000, 80000)
+POINT_CHOICES = (20000, 50000, 80000, 150000, 250000)
+Z_EXAGG_OPTIONS = [{"label": "1× (echt)", "value": 1}, {"label": "5×", "value": 5},
+                   {"label": "10×", "value": 10}, {"label": "20×", "value": 20}]
 CAD_DISPLAY_N = 25000
 
 _SOURCE_BADGE = {
@@ -61,6 +63,10 @@ def build_app(outputs_dir: Path = data.DEFAULT_OUTPUTS) -> dash.Dash:
                                         for v in POINT_CHOICES],
                                value=50000, clearable=False,
                                style={"width": "200px"})], style=_BOX),
+        html.Div([html.Label("Z-Streckung", style=_LABEL),
+                  dcc.Dropdown(id="zexagg", options=Z_EXAGG_OPTIONS, value=1,
+                               clearable=False,
+                               style={"width": "130px"})], style=_BOX),
         html.Div([html.Label("CAD-Ideal", style=_LABEL),
                   dcc.Checklist(id="showcad",
                                 options=[{"label": " anzeigen", "value": "on"}],
@@ -114,8 +120,9 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
         Output("view", "figure"), Output("badge", "children"),
         Output("badge", "style"), Output("caseinfo", "children"),
         Input("tabs", "value"), Input("case", "value"),
-        Input("npoints", "value"), Input("showcad", "value"))
-    def _update(tab, case, npoints, showcad):
+        Input("npoints", "value"), Input("showcad", "value"),
+        Input("zexagg", "value"))
+    def _update(tab, case, npoints, showcad, zexagg):
         if not case:
             return _placeholder("Keine Fälle in data/outputs gefunden."), \
                 "", {"display": "none"}, ""
@@ -137,7 +144,8 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
                    if showcad else [])
             import numpy as np
             fig = build_3d(np.asarray(cad) if len(cad) else np.empty((0, 3)),
-                           scan_pts, signed, show_cad=bool(showcad))
+                           scan_pts, signed, show_cad=bool(showcad),
+                           z_exagg=float(zexagg or 1))
         else:
             fig = _placeholder("Diese Ansicht kommt in der nächsten Iteration.")
 

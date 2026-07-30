@@ -1,12 +1,10 @@
 """Plotly-Figuren, datengetrieben aus dem gewählten Fall.
 
-Farblogik konsistent mit den Präsentationsbildern, hier aber dreifarbig wie im
-Auftrag verlangt: **blau = Material fehlt · grün = in Toleranz · rot = steht
-über**. Der grüne Bereich ist genau das Toleranzband ±0.25 mm; ausserhalb
-verlaufen blau bzw. rot mit zunehmender Abweichung dunkler.
-
-Achsengrenzen und Farbskala kommen aus den Daten des Falls — nichts ist fest
-gesetzt, damit reale Scans mit anderer Ausdehnung/Dichte nicht brechen.
+Farbskala identisch zu den Präsentationsbildern (`presentation_figures.py`):
+**blau = Material fehlt · neutral = in Toleranz · rot = steht über** — ein
+divergierender Verlauf mit neutralem Grau in der Mitte, kein eigener Farbton
+fürs Toleranzband. Achsengrenzen und Farbgrenze kommen aus den Daten des Falls,
+nichts ist fest gesetzt, damit reale Scans mit anderer Ausdehnung nicht brechen.
 """
 from __future__ import annotations
 
@@ -15,10 +13,12 @@ import plotly.graph_objects as go
 
 from schweiss_ki.analysis.deviation_field import TOLERANCE_MM
 
-C_MISSING_HI, C_MISSING_LO = "#12508f", "#8fb8e8"   # fehlt: dunkel- → hellblau
-C_INTOL = "#2e9e4f"                                 # in Toleranz: grün
-C_EXCESS_LO, C_EXCESS_HI = "#e79b8f", "#b5261c"     # steht über: hell- → dunkelrot
-C_CAD = "#b7c0c8"
+# Diverging blau → neutral → rot, wie DEV_CMAP in presentation_figures.py.
+DEV_COLORSCALE = [
+    [0.0, "#2a78d6"], [0.25, "#a9c6ea"], [0.5, "#e8e7e2"],
+    [0.75, "#eeab9f"], [1.0, "#e34948"],
+]
+C_CAD = "#9aa6b0"
 
 PLOT_BG = "#ffffff"
 INK = "#141a1f"
@@ -30,19 +30,6 @@ def robust_vmax(signed: np.ndarray, tol: float = TOLERANCE_MM) -> float:
     if finite.size == 0:
         return tol * 1.5
     return float(max(np.percentile(np.abs(finite), 99), tol * 1.5))
-
-
-def deviation_colorscale(vmax: float, tol: float = TOLERANCE_MM):
-    """Blau–grün–rot mit grünem Plateau über dem Toleranzband ±tol."""
-    half = min(0.48, tol / (2.0 * vmax))    # halbe Toleranzbreite, normiert
-    lo, hi, eps = 0.5 - half, 0.5 + half, 1e-3
-    return [
-        [0.0, C_MISSING_HI],
-        [max(0.0, lo - eps), C_MISSING_LO],
-        [lo, C_INTOL], [0.5, C_INTOL], [hi, C_INTOL],
-        [min(1.0, hi + eps), C_EXCESS_LO],
-        [1.0, C_EXCESS_HI],
-    ]
 
 
 def _colorbar(vmax: float) -> dict:
@@ -67,8 +54,7 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
 
     fig.add_trace(go.Scatter3d(
         x=scan_pts[:, 0], y=scan_pts[:, 1], z=scan_pts[:, 2], mode="markers",
-        marker=dict(size=2.0, color=signed,
-                    colorscale=deviation_colorscale(vmax),
+        marker=dict(size=2.0, color=signed, colorscale=DEV_COLORSCALE,
                     cmin=-vmax, cmax=vmax, opacity=0.95,
                     colorbar=_colorbar(vmax)),
         name="Scan",

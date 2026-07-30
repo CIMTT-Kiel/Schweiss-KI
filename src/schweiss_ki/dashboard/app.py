@@ -15,12 +15,12 @@ import plotly.graph_objects as go
 from . import data
 from .figures import INK, build_3d
 
-POINT_OPTIONS = [
-    {"label": "20 000 — flott drehen", "value": 20000},
-    {"label": "50 000", "value": 50000},
-    {"label": "80 000", "value": 80000},
-    {"label": "volle Dichte — langsam", "value": 0},
-]
+def _de(n: int) -> str:
+    """Tausenderpunkte, deutsche Konvention: 504200 → '504.200'."""
+    return f"{n:,}".replace(",", ".")
+
+
+POINT_CHOICES = (20000, 50000, 80000)
 CAD_DISPLAY_N = 25000
 
 _SOURCE_BADGE = {
@@ -56,9 +56,11 @@ def build_app(outputs_dir: Path = data.DEFAULT_OUTPUTS) -> dash.Dash:
                                clearable=False,
                                style={"width": "260px"})], style=_BOX),
         html.Div([html.Label("Punkte", style=_LABEL),
-                  dcc.Dropdown(id="npoints", options=POINT_OPTIONS,
+                  dcc.Dropdown(id="npoints",
+                               options=[{"label": _de(v), "value": v}
+                                        for v in POINT_CHOICES],
                                value=50000, clearable=False,
-                               style={"width": "220px"})], style=_BOX),
+                               style={"width": "200px"})], style=_BOX),
         html.Div([html.Label("CAD-Ideal", style=_LABEL),
                   dcc.Checklist(id="showcad",
                                 options=[{"label": " anzeigen", "value": "on"}],
@@ -96,6 +98,18 @@ def build_app(outputs_dir: Path = data.DEFAULT_OUTPUTS) -> dash.Dash:
 def _register(app: dash.Dash, outputs_dir: Path) -> None:
     od = str(outputs_dir)
 
+    @app.callback(Output("npoints", "options"), Input("case", "value"))
+    def _npoint_options(case):
+        # "alle" zeigt die echte Punktzahl des Falls; zu grosse Stufen werden
+        # deaktiviert (z. B. bei duennen realen Scans).
+        if not case:
+            return [{"label": _de(v), "value": v} for v in POINT_CHOICES]
+        n = len(data.case_field(outputs_dir, case).points)
+        opts = [{"label": _de(v), "value": v, "disabled": v > n}
+                for v in POINT_CHOICES]
+        opts.append({"label": f"alle ({_de(n)})", "value": 0})
+        return opts
+
     @app.callback(
         Output("view", "figure"), Output("badge", "children"),
         Output("badge", "style"), Output("caseinfo", "children"),
@@ -115,7 +129,7 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
 
         field = data.case_field(outputs_dir, case)
         info = (f"in Toleranz: {field.in_tolerance_rate * 100:.1f} %   ·   "
-                f"{len(field.points):,} Punkte   ·   Quelle: {src}")
+                f"{_de(len(field.points))} Punkte   ·   Quelle: {src}")
 
         if tab == "3d":
             scan_pts, signed = data.downsampled_cloud(field, npoints)

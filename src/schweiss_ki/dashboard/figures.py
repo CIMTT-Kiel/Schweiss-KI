@@ -306,7 +306,13 @@ def build_gap(report: dict, points: np.ndarray, labels: np.ndarray) -> go.Figure
 
     _base_layout(fig)
     fig.update_xaxes(title="X — Naht-Längsrichtung (mm)", row=1, col=1)
-    fig.update_yaxes(title="Spaltbreite (mm)", row=1, col=1)
+    # y-Achse bei 0 beginnen: sonst skaliert sie auf die winzigen Schwankungen
+    # und eine konstante Spaltbreite wirkt wild. Ein echter Keil zeigt sich
+    # trotzdem, weil die Obergrenze aus den Daten kommt.
+    wfin = widths[np.isfinite(widths)]
+    wtop = float(wfin.max()) * 1.15 if wfin.size else 1.0
+    fig.update_yaxes(title="Spaltbreite (mm)", range=[0, max(wtop, 0.5)],
+                     row=1, col=1)
     fig.update_xaxes(title=f"Y — quer (mm)   ·   Scheibe bei X≈{xc:.0f} mm",
                      row=1, col=2)
     fig.update_yaxes(title="Z — Tiefe (mm)", scaleanchor="x2", scaleratio=1,

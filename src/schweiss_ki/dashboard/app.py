@@ -10,10 +10,11 @@ from pathlib import Path
 
 import dash
 from dash import Input, Output, dcc, html
+import numpy as np
 import plotly.graph_objects as go
 
 from . import data
-from .figures import INK, build_3d
+from .figures import INK, build_3d, build_gap, build_levels, build_map
 
 def _de(n: int) -> str:
     """Tausenderpunkte, deutsche Konvention: 504200 → '504.200'."""
@@ -141,12 +142,19 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
         if tab == "3d":
             scan_pts, signed = data.downsampled_cloud(field, npoints)
             cad = (data.cad_top_points(outputs_dir, CAD_DISPLAY_N)
-                   if showcad else [])
-            import numpy as np
-            fig = build_3d(np.asarray(cad) if len(cad) else np.empty((0, 3)),
-                           scan_pts, signed, show_cad=bool(showcad),
-                           z_exagg=float(zexagg or 1))
+                   if showcad else np.empty((0, 3)))
+            fig = build_3d(np.asarray(cad), scan_pts, signed,
+                           show_cad=bool(showcad), z_exagg=float(zexagg or 1))
+        elif tab == "map":
+            scan_pts, signed = data.downsampled_cloud(field, npoints)
+            fig = build_map(scan_pts, signed)
+        elif tab == "levels":
+            fig = build_levels(data.load_report(od, case),
+                               field.in_tolerance_rate)
+        elif tab == "gap":
+            fig = build_gap(data.load_report(od, case),
+                            field.points, field.labels)
         else:
-            fig = _placeholder("Diese Ansicht kommt in der nächsten Iteration.")
+            fig = _placeholder("Unbekannte Ansicht.")
 
         return fig, text, badge_style, info

@@ -54,26 +54,27 @@ def _colorbar(vmax: float) -> dict:
 TRIAD_COLORS = {"X": "#e07b00", "Y": "#1a9e5f", "Z": "#7048b6"}
 
 
-def _add_triad(fig: go.Figure, length: float) -> None:
-    """Drei GLEICH lange X/Y/Z-Pfeile am Ursprung (0,0,0).
+def _add_triad(fig: go.Figure, origin: np.ndarray, length: float) -> None:
+    """Drei GLEICH lange X/Y/Z-Pfeile ab einer Ecke der Szene.
 
-    Rotiert mit der Szene, sodass man die Drehachse sofort sieht. Die
-    Pfeillänge wird in build_3d ins Achsenverhältnis und die Achsengrenzen
-    einbezogen — sonst würde der lange Z-Pfeil auf dem flachen Bauteil in einen
-    hauchdünnen Z-Streifen gequetscht und wirkte gekappt.
+    Rotiert mit, sodass man die Drehachse sofort sieht. Die Pfeilspitzen
+    werden in build_3d ins Achsenverhältnis und die Achsengrenzen einbezogen,
+    damit nichts geschnitten wird.
     """
     for axis, vec in (("X", (length, 0, 0)), ("Y", (0, length, 0)),
                       ("Z", (0, 0, length))):
         col = TRIAD_COLORS[axis]
+        tip = origin + np.array(vec, dtype=float)
         fig.add_trace(go.Scatter3d(
-            x=[0, vec[0]], y=[0, vec[1]], z=[0, vec[2]], mode="lines",
+            x=[origin[0], tip[0]], y=[origin[1], tip[1]],
+            z=[origin[2], tip[2]], mode="lines",
             line=dict(color=col, width=6), showlegend=False, hoverinfo="skip"))
         fig.add_trace(go.Cone(
-            x=[vec[0]], y=[vec[1]], z=[vec[2]], u=[vec[0]], v=[vec[1]],
+            x=[tip[0]], y=[tip[1]], z=[tip[2]], u=[vec[0]], v=[vec[1]],
             w=[vec[2]], sizemode="absolute", sizeref=length * 0.33,
             anchor="tip", showscale=False, colorscale=[[0, col], [1, col]],
             hoverinfo="skip"))
-        lab = 1.2 * np.array(vec, dtype=float)
+        lab = origin + 1.18 * np.array(vec, dtype=float)
         fig.add_trace(go.Scatter3d(
             x=[lab[0]], y=[lab[1]], z=[lab[2]], mode="text", text=[axis],
             textfont=dict(color=col, size=16, family="system-ui"),
@@ -107,11 +108,12 @@ def build_3d(cad_pts: np.ndarray, scan_pts: np.ndarray, signed: np.ndarray,
     mn, mx = data_pts.min(0), data_pts.max(0)
 
     if show_triad:
-        # gleich lange Pfeile, an der grössten Ausdehnung bemessen
+        # gleich lange Pfeile, an der grössten Ausdehnung bemessen, ab der
+        # Min-Ecke der Bounding-Box (klar an der Kante, nicht in der Wolke).
         L = 0.20 * float((mx - mn).max())
-        _add_triad(fig, L)
-        mx = np.maximum(mx, 1.25 * L)   # Triade ins Extent aufnehmen
-        mn = np.minimum(mn, 0.0)
+        o = mn.copy()
+        _add_triad(fig, o, L)
+        mx = np.maximum(mx, o + 1.25 * L)   # Spitzen ins Extent aufnehmen
 
     rng = np.where((mx - mn) < 1e-6, 1.0, mx - mn)
     ar = np.array([rng[0], rng[1], rng[2] * z_exagg])

@@ -243,45 +243,48 @@ def _footer(fig):
 # ── Bild 1: Abweichungs-Farbkarte ─────────────────────────────────────
 
 def figure_deviation_map(cad, path: Path):
-    fig = plt.figure(figsize=(13.5, 12.8), dpi=DPI)
-    fig.subplots_adjust(left=0.03, right=0.86, top=0.85, bottom=0.05,
-                        hspace=0.42, wspace=0.04)
+    # Querformat für PowerPoint: die drei Fälle nebeneinander, je Spalte die
+    # Schemaskizze oben und die Abweichungskarte darunter.
+    fig = plt.figure(figsize=(17, 8.7), dpi=DPI)
     norm = TwoSlopeNorm(vcenter=0.0, vmin=-VMAX, vmax=VMAX)
-
-    # Spaltenüberschriften
-    fig.text(0.24, 0.925, "Was verstellt wurde", ha="center", fontsize=12,
-             color=INK, weight="bold")
-    fig.text(0.24, 0.910, "Schema, Fehlstellung überhöht", ha="center",
-             fontsize=9, color=INK)
-    fig.text(0.64, 0.925, "Was die Messung sieht", ha="center", fontsize=12,
-             color=INK, weight="bold")
-    fig.text(0.64, 0.910, "Draufsicht auf die XY-Ebene", ha="center",
-             fontsize=9, color=INK)
+    gs = fig.add_gridspec(2, 3, left=0.075, right=0.895, top=0.82, bottom=0.13,
+                          hspace=0.30, wspace=0.14, height_ratios=[1.25, 0.95])
 
     mappable = None
-    for r, (case, title, fault, sub) in enumerate(CASES):
-        ax3 = fig.add_subplot(3, 2, 2 * r + 1, projection="3d")
+    for c, (case, title, fault, sub) in enumerate(CASES):
+        field = signed_distance_field(OUTPUTS / case, cad)
+        rate = field.in_tolerance_rate * 100
+
+        ax3 = fig.add_subplot(gs[0, c], projection="3d")
         draw_fault_schematic(ax3, fault)
 
-        axm = fig.add_subplot(3, 2, 2 * r + 2)
-        field = signed_distance_field(OUTPUTS / case, cad)
+        axm = fig.add_subplot(gs[1, c])
         sel = subsample(len(field.points), 45000, seed=2)
         p, d = field.points[sel], field.signed[sel]
         order = np.argsort(np.abs(d))
         mappable = axm.scatter(p[order, 0], p[order, 1], c=d[order],
                                cmap=DEV_CMAP, norm=norm, s=2, marker="s",
                                linewidths=0, rasterized=True)
-        rate = field.in_tolerance_rate * 100
-        axm.set_title(f"{title} — {rate:.0f} % in Toleranz", fontsize=12,
-                      color=INK, weight="bold", pad=14)
-        axm.text(0.5, 1.02, sub, transform=axm.transAxes, ha="center",
-                 va="bottom", fontsize=9.5, color=INK)
         _plate_axes(axm)
 
-    fig.suptitle("Abweichung zum CAD-Ideal — Scan eingefärbt nach Abstand",
-                 fontsize=15, weight="bold", color=INK, y=0.975)
+        # Spaltenkopf über der Skizze
+        pos = ax3.get_position()
+        xcen = (pos.x0 + pos.x1) / 2
+        fig.text(xcen, 0.885, f"{title} — {rate:.0f} % in Toleranz",
+                 ha="center", fontsize=13.5, weight="bold", color=INK)
+        fig.text(xcen, 0.858, sub, ha="center", fontsize=9.5, color=INK)
 
-    cax = fig.add_axes([0.895, 0.30, 0.015, 0.40])
+    # Zeilenbeschriftung links, gedreht — kollidiert nicht mit den Achsen
+    fig.text(0.018, 0.63, "Was verstellt wurde", rotation=90, ha="center",
+             va="center", fontsize=11.5, weight="bold", color=INK)
+    fig.text(0.018, 0.31, "Was die Messung sieht", rotation=90, ha="center",
+             va="center", fontsize=11.5, weight="bold", color=INK)
+
+    fig.suptitle("Abweichung zum CAD-Ideal — Scan eingefärbt nach Abstand",
+                 fontsize=17, weight="bold", color=INK, y=0.965)
+
+    # vertikale Farbleiste rechts
+    cax = fig.add_axes([0.925, 0.20, 0.013, 0.40])
     cbar = fig.colorbar(mappable, cax=cax, extend="both")
     cbar.ax.tick_params(colors=INK, labelsize=8)
     cbar.ax.axhspan(-TOLERANCE_MM, TOLERANCE_MM, facecolor="none",
@@ -289,7 +292,7 @@ def figure_deviation_map(cad, path: Path):
     for y, txt, va in ((VMAX, "Material\nsteht über", "top"),
                        (0.0, "in Toleranz\n(±0.25 mm)", "center"),
                        (-VMAX, "Material\nfehlt", "bottom")):
-        cbar.ax.text(2.6, y, txt, transform=cbar.ax.get_yaxis_transform(),
+        cbar.ax.text(2.7, y, txt, transform=cbar.ax.get_yaxis_transform(),
                      ha="left", va=va, fontsize=8.5, color=INK)
 
     _footer(fig)

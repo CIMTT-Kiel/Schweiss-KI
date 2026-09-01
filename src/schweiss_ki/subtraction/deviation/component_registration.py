@@ -242,11 +242,18 @@ class ComponentRegistration(DeviationStep):
     def _build_pipeline(self) -> RegistrationPipeline:
         """Baut die Registrierungs-Pipeline für ein einzelnes Werkstück.
 
-        Nur ICPFine – kein CoarsePCA, weil die Ausgangslage bereits
-        im CAD-Frame liegt und PCA an einer einzelnen Platte instabil ist.
+        XEdgeAlign vor ICPFine – kein CoarsePCA (PCA ist an einer einzelnen
+        Platte instabil). XEdgeAlign richtet die Naht-Längsrichtung (X) über
+        die Kanten aus, bevor ICP verfeinert: Point-to-Plane-ICP ist in X
+        schwach (prismatische Nut, X-Signal nur an den Enden) und bleibt sonst
+        mit einem Restversatz stehen. Da jedes Werkstück einzeln gegen das CAD
+        ausgerichtet wird, ergibt die Differenz der beiden Rest-Versätze einen
+        systematischen Fehler in der gemessenen Relativlage (früher ~0.2 mm in
+        Tx). XEdgeAlign nimmt ICP diesen X-Sprung ab.
         """
-        from ..registration import ICPFine
+        from ..registration import ICPFine, XEdgeAlign
         return RegistrationPipeline([
+            XEdgeAlign(anchor_labels=list(self.icp_anchor_labels)),
             ICPFine(
                 max_correspondence_distance=self.icp_max_correspondence_distance,
                 max_iteration=self.icp_max_iteration,

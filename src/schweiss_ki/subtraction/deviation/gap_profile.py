@@ -162,11 +162,17 @@ class GapProfile(DeviationStep):
             )
             return {"n_bins_valid": 0, "skipped": True}
 
+        # Volle beidseitig belegte Nut-Ausdehnung (vor Margin) – das ist die
+        # physische Nahtlänge; der Margin klammert nur die Heftpunkte aus den
+        # Flankenfits aus, verkürzt die Nut aber nicht.
+        seam_full_min = max(flank_a[:, self.seam_axis].min(),
+                            flank_b[:, self.seam_axis].min())
+        seam_full_max = min(flank_a[:, self.seam_axis].max(),
+                            flank_b[:, self.seam_axis].max())
+
         # Bin-Grenzen entlang der Naht-Achse, Margin gegen Heftpunkte
-        seam_min = max(flank_a[:, self.seam_axis].min(),
-                       flank_b[:, self.seam_axis].min()) + self.edge_margin
-        seam_max = min(flank_a[:, self.seam_axis].max(),
-                       flank_b[:, self.seam_axis].max()) - self.edge_margin
+        seam_min = seam_full_min + self.edge_margin
+        seam_max = seam_full_max - self.edge_margin
 
         if seam_max <= seam_min:
             logger.warning(
@@ -251,6 +257,8 @@ class GapProfile(DeviationStep):
         # In DeviationData schreiben
         data.gap_profile = {
             "seam_axis_centers": bin_centers,
+            "seam_extent_mm": [float(seam_full_min), float(seam_full_max)],
+            "seam_length_mm": float(seam_full_max - seam_full_min),
             "seam_axis": self.seam_axis,
             "gap_axis": self.gap_axis,
             "vertical_axis": self.vertical_axis,

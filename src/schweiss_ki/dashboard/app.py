@@ -77,6 +77,14 @@ def build_app(outputs_dir: Path = data.DEFAULT_OUTPUTS) -> dash.Dash:
                                 labelStyle={"marginRight": "10px"},
                                 style={"color": INK, "fontSize": "13px",
                                        "display": "flex"})], style=_BOX),
+        html.Div([html.Label("Materialstärke [mm]", style=_LABEL),
+                  dcc.Input(id="thickness", type="number", value=5.0,
+                            min=0.1, step=0.5,
+                            style={"width": "95px"})], style=_BOX),
+        html.Div([html.Label("Nahtüberhöhung [mm]", style=_LABEL),
+                  dcc.Input(id="reinforcement", type="number", value=0.0,
+                            min=0.0, step=0.5,
+                            style={"width": "95px"})], style=_BOX),
         html.Div(id="badge", style={"marginLeft": "auto",
                                     "alignSelf": "center"}),
     ], style={"display": "flex", "gap": "22px", "alignItems": "flex-end",
@@ -125,9 +133,12 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
         Output("badge", "style"), Output("caseinfo", "children"),
         Input("tabs", "value"), Input("case", "value"),
         Input("npoints", "value"), Input("display", "value"),
-        Input("zexagg", "value"))
-    def _update(tab, case, npoints, display, zexagg):
+        Input("zexagg", "value"), Input("thickness", "value"),
+        Input("reinforcement", "value"))
+    def _update(tab, case, npoints, display, zexagg, thickness, reinforcement):
         display = display or []
+        thickness = float(thickness) if thickness else 5.0
+        reinforcement = float(reinforcement) if reinforcement else 0.0
         if not case:
             return _placeholder("Keine Fälle in data/outputs gefunden."), \
                 "", {"display": "none"}, ""
@@ -156,10 +167,12 @@ def _register(app: dash.Dash, outputs_dir: Path) -> None:
             fig = build_map(scan_pts, signed)
         elif tab == "levels":
             fig = build_levels(data.load_report(od, case),
-                               field.in_tolerance_rate)
+                               field.in_tolerance_rate,
+                               thickness, reinforcement)
         elif tab == "gap":
             fig = build_gap(data.load_report(od, case),
-                            field.points, field.labels)
+                            field.points, field.labels,
+                            thickness, reinforcement)
         else:
             fig = _placeholder("Unbekannte Ansicht.")
 

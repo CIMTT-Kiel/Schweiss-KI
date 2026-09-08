@@ -16,6 +16,8 @@ from plotly.subplots import make_subplots
 
 from schweiss_ki.analysis.deviation_field import TOLERANCE_MM
 from schweiss_ki.analysis.synthetic_validation import extract_features
+from schweiss_ki.analysis.weld_volume import (DEFAULT_THICKNESS_MM,
+                                              cross_section_areas, fill_volume)
 
 # Segmentierungslabel → Farbe/Name, konsistent zu subtraction/plots.py.
 LABEL_STYLE = {0: ("#b0bec5", "Oberseite/Hintergrund"),
@@ -176,19 +178,33 @@ def build_map(scan_pts: np.ndarray, signed: np.ndarray) -> go.Figure:
 
 # ── Drei Ebenen (global / Voxel / Merkmale) ───────────────────────────
 
-def _feature_rows(report: dict, in_tol_rate: float) -> list[tuple[str, str]]:
+def _feature_rows(report: dict, in_tol_rate: float,
+                  thickness_mm: float = DEFAULT_THICKNESS_MM,
+                  reinforcement_mm: float = 0.0) -> list[tuple[str, str]]:
     f = extract_features(report)
     wsum = ((f["flank_a_angle_deg"] - 45.0) + (f["flank_b_angle_deg"] - 45.0)
             if np.isfinite(f["flank_a_angle_deg"]) else math.nan)
+    vol = fill_volume(report, thickness_mm, reinforcement_mm)
 
     def fmt(v, unit, dec=2):
         return "—" if v is None or not np.isfinite(v) else f"{v:+.{dec}f} {unit}"
+
+    v3 = vol.get("fill_volume_mm3", math.nan)
+    vol_str = "—" if not np.isfinite(v3) else \
+        f"{v3:,.0f} mm³".replace(",", ".")
+    if np.isfinite(vol.get("mean_area_mm2", math.nan)):
+        area_str = (f"{vol['mean_area_mm2']:.1f} mm² "
+                    f"({vol['area_min_mm2']:.1f}–{vol['area_max_mm2']:.1f})")
+    else:
+        area_str = "—"
 
     return [
         ("in Toleranz", f"{in_tol_rate * 100:.1f} %"),
         ("Ø |Abstand| (global)", fmt(f["global_mean_abs"], "mm", 3).lstrip("+")),
         ("Spaltbreite @ d_root", fmt(f["gap_width_mm"], "mm", 3).lstrip("+")),
         ("d_root (Auswertetiefe)", fmt(f["d_root_mm"], "mm", 2).lstrip("+")),
+        (f"Füllvolumen (T={thickness_mm:g} mm)", vol_str),
+        ("Ø-Querschnitt (min–max)", area_str),
         ("Winkelsumme (α_A+α_B−90°)", fmt(wsum, "°", 2)),
         ("Flankenasymmetrie", fmt(f["flank_asymmetry_deg"], "°", 2).lstrip("+")),
         ("Kantenversatz", fmt(f["edge_offset_mm"], "mm", 2)),
@@ -200,7 +216,9 @@ def _feature_rows(report: dict, in_tol_rate: float) -> list[tuple[str, str]]:
     ]
 
 
-def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
+def build_levels(report: dict, in_tol_rate: float,
+                 thickness_mm: float = DEFAULT_THICKNESS_MM,
+                 reinforcement_mm: float = 0.0) -> go.Figure:
     """Global (Regionsabweichung) · Voxel (räumlich) · Merkmale (Tabelle)."""
     dev = report["deviation"]
     fig = make_subplots(
@@ -235,7 +253,7 @@ def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
             hovertemplate="X %{x:.0f} · Y %{y:.0f}<br>%{marker.color:+.2f} mm"
                           "<extra></extra>"), 1, 2)
 
-    rows = _feature_rows(report, in_tol_rate)
+    rows = _feature_rows(report, in_tol_rate, thickness_mm, reinforcement_mm)
     fig.add_trace(go.Table(
         columnwidth=[58, 42],
         header=dict(values=["<b>Merkmal</b>", "<b>Wert</b>"],
@@ -258,24 +276,43 @@ def build_levels(report: dict, in_tol_rate: float) -> go.Figure:
 
 # ── Gap-Profil / Querschnitt ──────────────────────────────────────────
 
-def build_gap(report: dict, points: np.ndarray, labels: np.ndarray) -> go.Figure:
-    """Spaltbreite entlang der Naht + Querschnitt (Flanken, Referenzebene)."""
+def build_gap(report: dict, points: np.ndarray, labels: np.ndarray,
+              thickness_mm: float = DEFAULT_THICKNESS_MM,
+              reinforcement_mm: float = 0.0) -> go.Figure:
+    """Spaltbreite + Querschnittsfläche entlang der Naht, plus Querschnittsbild.
+
+    Links laufen zwei Kurven auf getrennten Achsen: Spaltbreite (mm, blau) und
+    die daraus mit der Materialstärke gerechnete Nut-Querschnittsfläche (mm²,
+    grün) — letztere ist die Volumenverteilung für die Roboterbahn.
+    """
     gp = report["deviation"].get("gap_profile", {})
     centers = _finite(gp.get("seam_axis_centers", []))
     widths = _finite(gp.get("gap_root_widths", []))
+    areas = cross_section_areas(report, thickness_mm, reinforcement_mm)
+    vol = fill_volume(report, thickness_mm, reinforcement_mm)
+    v3 = vol.get("fill_volume_mm3", math.nan)
+    left_title = ("Spaltbreite &amp; Querschnitt entlang der Naht" +
+                  (f"  ·  Füllvolumen {v3:,.0f} mm³".replace(",", ".")
+                   if np.isfinite(v3) else ""))
 
     fig = make_subplots(
         rows=1, cols=2, column_widths=[0.5, 0.5],
-        subplot_titles=("Spaltbreite entlang der Naht",
-                        "Querschnitt an einer Nahtstelle"),
-        horizontal_spacing=0.09)
+        specs=[[{"secondary_y": True}, {}]],
+        subplot_titles=(left_title, "Querschnitt an einer Nahtstelle"),
+        horizontal_spacing=0.11)
 
     if centers.size:
         fig.add_trace(go.Scatter(
-            x=centers, y=widths, mode="lines+markers",
+            x=centers, y=widths, mode="lines+markers", name="Spaltbreite",
             line=dict(color="#1976d2"), marker=dict(size=5),
             hovertemplate="X %{x:.0f} mm<br>Spalt %{y:.3f} mm<extra></extra>"),
-            1, 1)
+            1, 1, secondary_y=False)
+    if centers.size and np.isfinite(areas).any():
+        fig.add_trace(go.Scatter(
+            x=centers, y=areas, mode="lines+markers", name="Querschnitt",
+            line=dict(color="#2e7d32"), marker=dict(size=5),
+            hovertemplate="X %{x:.0f} mm<br>Fläche %{y:.1f} mm²<extra></extra>"),
+            1, 1, secondary_y=True)
 
     # Querschnitt: dünne X-Scheibe der echten Punkte, nach Label gefärbt,
     # plus die Referenzebene aus dem Report.
@@ -306,17 +343,26 @@ def build_gap(report: dict, points: np.ndarray, labels: np.ndarray) -> go.Figure
 
     _base_layout(fig)
     fig.update_xaxes(title="X — Naht-Längsrichtung (mm)", row=1, col=1)
-    # y-Achse bei 0 beginnen: sonst skaliert sie auf die winzigen Schwankungen
-    # und eine konstante Spaltbreite wirkt wild. Ein echter Keil zeigt sich
-    # trotzdem, weil die Obergrenze aus den Daten kommt.
+    # y-Achsen bei 0 beginnen: sonst skalieren sie auf die winzigen Schwankungen
+    # und eine konstante Spaltbreite/Fläche wirkt wild. Ein echter Keil zeigt
+    # sich trotzdem, weil die Obergrenze aus den Daten kommt.
     wfin = widths[np.isfinite(widths)]
     wtop = float(wfin.max()) * 1.15 if wfin.size else 1.0
-    fig.update_yaxes(title="Spaltbreite (mm)", range=[0, max(wtop, 0.5)],
-                     row=1, col=1)
+    fig.update_yaxes(title=dict(text="Spaltbreite (mm)", font=dict(color="#1976d2")),
+                     tickfont=dict(color="#1976d2"), range=[0, max(wtop, 0.5)],
+                     row=1, col=1, secondary_y=False)
+    afin = areas[np.isfinite(areas)] if areas.size else np.array([])
+    atop = float(afin.max()) * 1.15 if afin.size else 1.0
+    fig.update_yaxes(title=dict(text="Querschnitt (mm²)", font=dict(color="#2e7d32")),
+                     tickfont=dict(color="#2e7d32"), range=[0, max(atop, 1.0)],
+                     showgrid=False, row=1, col=1, secondary_y=True)
+    # secondary_y verschiebt die Achsen-Nummerierung; die x-ID des Querschnitt-
+    # Subplots dynamisch holen, statt sie fest als "x2" anzunehmen.
+    x2 = fig.get_subplot(1, 2).xaxis.plotly_name.replace("axis", "")
     fig.update_xaxes(title=f"Y — quer (mm)   ·   Scheibe bei X≈{xc:.0f} mm",
                      row=1, col=2)
-    fig.update_yaxes(title="Z — Tiefe (mm)", scaleanchor="x2", scaleratio=1,
+    fig.update_yaxes(title="Z — Tiefe (mm)", scaleanchor=x2, scaleratio=1,
                      row=1, col=2)
-    fig.update_layout(legend=dict(x=0.55, y=0.98,
+    fig.update_layout(legend=dict(x=0.30, y=0.99, orientation="h",
                                   bgcolor="rgba(255,255,255,0.7)"))
     return fig

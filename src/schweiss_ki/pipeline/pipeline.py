@@ -286,11 +286,20 @@ class Pipeline:
             preprocessing_report=preprocessing_report,
         )
 
-        if self.config.segmentation.enabled:
+        # Reihenfolge: erst registrieren, dann segmentieren, dann Deviation.
+        # Im CAD-Frame stimmen die Segmentierungs-Achsen (Naht=X, Spalt=Y) per
+        # Definition – unabhängig davon, wie der Scanner das Teil aufgenommen
+        # hat. Die Segmentierung läuft deshalb INNERHALB von _run_subtraction
+        # nach der Registrierung. Ohne CAD/Subtraktion gibt es keinen CAD-Frame,
+        # dann wird direkt auf der vorverarbeiteten (Scanner-)Wolke segmentiert.
+        do_subtraction = (cad_step_file is not None
+                          and self.config.subtraction.enabled)
+
+        if not do_subtraction and self.config.segmentation.enabled:
             self._run_segmentation(model)
 
-        # Stage 4: Subtraktion gegen CAD
-        if cad_step_file is not None and self.config.subtraction.enabled:
+        # Stage 4: Subtraktion gegen CAD (registriert → segmentiert → Deviation)
+        if do_subtraction:
             cad_pcd = self._get_or_convert_cad(Path(cad_step_file))
             self._run_subtraction(model, cad_pcd, cad_source_file=Path(cad_step_file))
         elif cad_step_file is not None and not self.config.subtraction.enabled:
@@ -595,10 +604,13 @@ class Pipeline:
 
         Mutiert scan_model:
             - point_cloud wird in CAD-Koordinatensystem überführt
+            - labels werden gesetzt (Segmentierung läuft hier, nach der
+              Registrierung, im CAD-Frame)
             - subtraction_report wird gesetzt
 
         Args:
-            scan_model: Segmentierter Scan (idealerweise mit Labels).
+            scan_model: Vorverarbeiteter Scan (noch ohne Labels; die
+                Registrierung nutzt dann alle Punkte als Anker).
             cad_pcd: CAD-Punktwolke mit Normalen.
             cad_source_file: Pfad zur Quell-STEP-Datei (für den Report).
         """
@@ -624,6 +636,13 @@ class Pipeline:
 
         # Scan dauerhaft ins CAD-Koordinatensystem überführen
         scan_model.point_cloud = scan_aligned
+
+        # Segmentierung ERST JETZT – im CAD-Frame stimmen Naht=X / Spalt=Y per
+        # Definition, unabhängig von der Scanner-Aufnahmelage. Vor der
+        # Registrierung (Scanner-Frame) würde der Flankenfilter die Normalen
+        # entlang der falschen Achse suchen.
+        if self.config.segmentation.enabled:
+            self._run_segmentation(scan_model)
 
         # Differenzanalyse auf der ausgerichteten Wolke (gegen das volle CAD)
         dev_pipeline = DeviationPipeline.from_config(self._config_path)

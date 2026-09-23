@@ -16,9 +16,9 @@ import open3d as o3d
 # Scanner-Dateiname → sauberer, ASCII-freundlicher model_id.
 NAME_MAP = {
     "SCHWEIßSPALT 1,5 Spalt I": "real_spalt_1v5_I",
-    "SCHWEIßSPALT 1,5 Spalt II": "real_spalt_1v5_II",
-    "SCHWEIßSPALT O-Spalt": "real_spalt_0",       # Sollwert: kein Spalt
-    "Schweißspalt 1,0 auf 2,5": "real_spalt_1v0_auf_2v5",
+    "SCHWEIßSPALT1,5 Spalt II": "real_spalt_1v5_II",   # (ohne Leerzeichen im Original)
+    "SCHWEIßSPALT 0-Spalt": "real_spalt_0",            # Sollwert: kein Spalt
+    "SCHWEIßSPALT 1 auf 2,5": "real_spalt_1_auf_2v5",  # Keil 1,0 -> 2,5 mm
 }
 
 
